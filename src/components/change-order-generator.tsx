@@ -15,10 +15,12 @@ import {
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChangeOrderInput,
+  createDefaultInput,
   defaultInput,
   formatMoney,
   generateChangeOrder,
   getPaymentState,
+  sanitizeChangeOrderInput,
   validateChangeOrder,
   type Industry,
   type PaymentTiming,
@@ -60,10 +62,33 @@ function parseSavedDraft(value: string | null): ChangeOrderInput | null {
   }
 
   try {
-    const parsed = JSON.parse(value) as ChangeOrderInput;
-    return { ...defaultInput, ...parsed };
+    return sanitizeChangeOrderInput(JSON.parse(value));
   } catch {
     return null;
+  }
+}
+
+function readSavedDraft(): ChangeOrderInput | null {
+  try {
+    return parseSavedDraft(window.localStorage.getItem(storageKey));
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedDraft(input: ChangeOrderInput) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(input));
+  } catch {
+    // Browsers can block storage in private or restricted modes.
+  }
+}
+
+function clearSavedDraft() {
+  try {
+    window.localStorage.removeItem(storageKey);
+  } catch {
+    // Nothing to clear if storage is unavailable.
   }
 }
 
@@ -96,12 +121,8 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
   const hasErrors = Object.keys(errors).length > 0;
 
   useEffect(() => {
-    const saved = parseSavedDraft(window.localStorage.getItem(storageKey));
-
     const restoreId = window.setTimeout(() => {
-      if (saved) {
-        setInput(saved);
-      }
+      setInput(readSavedDraft() ?? createDefaultInput());
 
       setDraftLoaded(true);
     }, 0);
@@ -114,7 +135,7 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
       return;
     }
 
-    window.localStorage.setItem(storageKey, JSON.stringify(input));
+    writeSavedDraft(input);
   }, [draftLoaded, input]);
 
   useEffect(() => {
@@ -230,8 +251,8 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
   }
 
   function resetDraft() {
-    window.localStorage.removeItem(storageKey);
-    setInput(defaultInput);
+    clearSavedDraft();
+    setInput(createDefaultInput());
     setErrors({});
     showToast("Example draft restored.");
     trackEvent("draft_reset");

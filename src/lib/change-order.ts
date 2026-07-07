@@ -52,6 +52,23 @@ export type GeneratedChangeOrder = {
 
 export type ValidationErrors = Partial<Record<keyof ChangeOrderInput, string>>;
 
+const industryValues: readonly Industry[] = [
+  "remodeling",
+  "landscaping",
+  "handyman",
+  "web-design",
+  "creative",
+  "consulting"
+];
+
+const paymentTimingValues: readonly PaymentTiming[] = [
+  "deposit-before",
+  "completion",
+  "next-invoice"
+];
+
+const toneValues: readonly Tone[] = ["friendly", "direct", "formal"];
+
 export const defaultInput: ChangeOrderInput = {
   provider: "Greenline Remodeling",
   client: "Morgan Smith",
@@ -66,12 +83,19 @@ export const defaultInput: ChangeOrderInput = {
   marginPercent: 25,
   rushPercent: 0,
   depositPercent: 50,
-  approvalDeadline: nextDate(3),
+  approvalDeadline: "",
   paymentTiming: "deposit-before",
   industry: "remodeling",
   tone: "friendly",
   currency: "USD"
 };
+
+export function createDefaultInput(): ChangeOrderInput {
+  return {
+    ...defaultInput,
+    approvalDeadline: nextDate(3)
+  };
+}
 
 export function nextDate(daysFromNow: number) {
   const date = new Date();
@@ -85,6 +109,81 @@ export function clampNumber(value: number, min: number, max: number) {
   }
 
   return Math.min(Math.max(value, min), max);
+}
+
+function stringValue(value: unknown, fallback: string) {
+  return typeof value === "string" ? value : fallback;
+}
+
+function numberValue(value: unknown, fallback: number, min: number, max: number) {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseFloat(value)
+        : Number.NaN;
+
+  return clampNumber(Number.isFinite(parsed) ? parsed : fallback, min, max);
+}
+
+function dateValue(value: unknown, fallback: string) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return fallback;
+  }
+
+  return Number.isNaN(new Date(`${value}T12:00:00`).getTime()) ? fallback : value;
+}
+
+function isAllowedValue<T extends string>(value: unknown, allowed: readonly T[]): value is T {
+  return typeof value === "string" && allowed.includes(value as T);
+}
+
+function normalizeCurrency(value: unknown, fallback = "USD") {
+  const candidate = typeof value === "string" ? value.trim().toUpperCase() : "";
+
+  if (!candidate) {
+    return fallback;
+  }
+
+  try {
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: candidate
+    }).format(0);
+
+    return candidate;
+  } catch {
+    return fallback;
+  }
+}
+
+export function sanitizeChangeOrderInput(value: unknown): ChangeOrderInput {
+  const saved =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Partial<Record<keyof ChangeOrderInput, unknown>>)
+      : {};
+  const fallback = createDefaultInput();
+
+  return {
+    provider: stringValue(saved.provider, fallback.provider),
+    client: stringValue(saved.client, fallback.client),
+    project: stringValue(saved.project, fallback.project),
+    originalScope: stringValue(saved.originalScope, fallback.originalScope),
+    newRequest: stringValue(saved.newRequest, fallback.newRequest),
+    laborHours: numberValue(saved.laborHours, fallback.laborHours, 0, 10000),
+    hourlyRate: numberValue(saved.hourlyRate, fallback.hourlyRate, 0, 100000),
+    materialsCost: numberValue(saved.materialsCost, fallback.materialsCost, 0, 100000000),
+    marginPercent: numberValue(saved.marginPercent, fallback.marginPercent, 0, 80),
+    rushPercent: numberValue(saved.rushPercent, fallback.rushPercent, 0, 100),
+    depositPercent: numberValue(saved.depositPercent, fallback.depositPercent, 0, 100),
+    approvalDeadline: dateValue(saved.approvalDeadline, fallback.approvalDeadline),
+    paymentTiming: isAllowedValue(saved.paymentTiming, paymentTimingValues)
+      ? saved.paymentTiming
+      : fallback.paymentTiming,
+    industry: isAllowedValue(saved.industry, industryValues) ? saved.industry : fallback.industry,
+    tone: isAllowedValue(saved.tone, toneValues) ? saved.tone : fallback.tone,
+    currency: normalizeCurrency(saved.currency, fallback.currency)
+  };
 }
 
 export function calculatePrice(input: ChangeOrderInput): PriceBreakdown {
@@ -118,8 +217,9 @@ export function calculatePrice(input: ChangeOrderInput): PriceBreakdown {
 export function formatMoney(value: number, currency = "USD") {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency,
-    maximumFractionDigits: 0
+    currency: normalizeCurrency(currency),
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(Number.isFinite(value) ? value : 0);
 }
 
@@ -254,11 +354,25 @@ export function getPaymentState(paymentLink?: string | null) {
     };
   }
 
-  return {
-    configured: true,
-    href: trimmed,
-    label: "Unlock polished export"
-  };
+  try {
+    const url = new URL(trimmed);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("Unsupported payment link protocol");
+    }
+
+    return {
+      configured: true,
+      href: url.href,
+      label: "Unlock polished export"
+    };
+  } catch {
+    return {
+      configured: false,
+      href: "",
+      label: "Payment link not configured yet"
+    };
+  }
 }
 
 export function generateChangeOrder(input: ChangeOrderInput): GeneratedChangeOrder {
