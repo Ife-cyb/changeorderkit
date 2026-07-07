@@ -35,3 +35,8 @@ npm run check
 ```
 
 This runs TypeScript, ESLint, tests, and a production build.
+
+## Deployment
+
+The Vercel project is connected to this GitHub repository. Pushes to `main` trigger
+automatic Vercel deployments.
