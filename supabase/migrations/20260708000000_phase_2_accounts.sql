@@ -25,7 +25,6 @@ create table if not exists public.change_orders (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists profiles_id_idx on public.profiles (id);
 create index if not exists change_orders_user_updated_idx
   on public.change_orders (user_id, updated_at desc);
 create index if not exists change_orders_user_status_idx
@@ -33,6 +32,9 @@ create index if not exists change_orders_user_status_idx
 
 alter table public.profiles enable row level security;
 alter table public.change_orders enable row level security;
+
+revoke all on public.profiles from anon, authenticated, public;
+revoke all on public.change_orders from anon, authenticated, public;
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.profiles to authenticated;
