@@ -5,9 +5,11 @@ export const metadata = {
 
 export default function TermsPage() {
   return (
-    <article className="tool-shell max-w-3xl py-12">
-      <h1 className="text-4xl font-black text-slate-950">Terms</h1>
-      <div className="mt-6 space-y-5 text-base leading-8 text-slate-700">
+    <article className="tool-shell py-12">
+      <div className="utility-panel max-w-3xl p-5 sm:p-7">
+        <p className="panel-kicker">Terms</p>
+        <h1 className="mt-2 text-4xl font-black tracking-tight text-[var(--ink)]">Terms</h1>
+        <div className="mt-6 space-y-5 text-base leading-8 text-[var(--ink-soft)]">
         <p>
           ChangeOrderKit provides business templates and calculations for project communication.
           It does not provide legal, tax, accounting, or debt-collection advice.
@@ -20,6 +22,7 @@ export default function TermsPage() {
           The tool is provided as-is for early MVP validation. Verify all numbers, wording, and
           payment terms before using them with a client.
         </p>
+        </div>
       </div>
     </article>
   );

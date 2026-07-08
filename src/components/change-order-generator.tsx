@@ -123,7 +123,7 @@ function InputError({ id, message }: { id: string; message?: string }) {
   }
 
   return (
-    <p id={id} className="flex items-start gap-1.5 text-sm font-semibold text-red-700" role="alert">
+    <p id={id} className="flex items-start gap-1.5 text-sm font-semibold text-[var(--danger)]" role="alert">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       {message}
     </p>
@@ -497,57 +497,86 @@ export function ChangeOrderGenerator({
   }
 
   return (
-    <section className="tool-shell py-8 sm:py-10" aria-label="Change order generator">
-      <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(280px,0.45fr)] lg:items-end">
+    <section className="tool-shell py-7 sm:py-10" aria-label="Change order generator">
+      <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.45fr)] lg:items-end">
         <div>
-          <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-3 py-1 text-sm font-bold text-teal-800">
+          <p className="panel-kicker mb-3">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Change order and payment protection
+            Approval packet
           </p>
-          <h1 className="max-w-4xl text-4xl font-black leading-tight text-slate-950 sm:text-5xl lg:text-6xl">
+          <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight text-[var(--ink)] sm:text-5xl lg:text-7xl">
             Turn client changes into approved, paid work before you start.
           </h1>
-          <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-700">
-            Price the extra request, write the approval email, and produce a cleaner client-ready
-            change-order document.
+          <p className="mt-5 max-w-[65ch] text-lg leading-8 text-[var(--ink-soft)]">
+            Price the extra request, write the approval email, and produce a client-ready change
+            order with terms, scope boundaries, and signature language.
           </p>
         </div>
-        <div className="utility-panel no-print p-4">
-          <p className="text-sm font-black uppercase tracking-[0.16em] text-slate-500">
-            {isSignedIn ? "Workspace enabled" : "Free browser draft"}
-          </p>
-          <p className="mt-2 text-sm leading-6 text-slate-700">
-            {isSignedIn
-              ? "Save drafts to your dashboard and reuse your business defaults."
-              : "Your entries autosave in this browser. Sign in when you want saved records."}
-          </p>
-          <div className="mt-3 flex flex-col gap-2">
+        <aside className="ledger-rail no-print overflow-hidden" aria-label="Current draft status">
+          <div className="p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-[color:oklch(0.77_0.04_155)]">
+              {isSignedIn ? "Workspace enabled" : "Browser draft"}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[color:oklch(0.88_0.012_115)]">
+              {isSignedIn
+                ? "Saved drafts and business defaults are active."
+                : "Autosaves locally. Sign in when this becomes a job record."}
+            </p>
+          </div>
+          <div className="ledger-row">
+            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Current total</span>
+            <strong className="font-mono text-sm">
+              {formatMoney(generated.breakdown.total, input.currency)}
+            </strong>
+          </div>
+          <div className="ledger-row">
+            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Deposit due</span>
+            <strong className="font-mono text-sm">
+              {formatMoney(generated.breakdown.depositAmount, input.currency)}
+            </strong>
+          </div>
+          <div className="ledger-row">
+            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Approval by</span>
+            <strong className="font-mono text-sm">{formatDate(input.approvalDeadline)}</strong>
+          </div>
+          <div className="border-t border-[color:oklch(0.48_0.02_145_/_0.42)] p-3">
             {isSignedIn ? (
-              <Link className="btn btn-secondary" href="/dashboard">
+              <Link className="btn btn-secondary w-full" href="/dashboard">
                 <FileText className="h-5 w-5" aria-hidden="true" />
                 Dashboard
               </Link>
             ) : (
-              <Link className="btn btn-secondary" href="/sign-in?next=/">
+              <Link className="btn btn-secondary w-full" href="/sign-in?next=/">
                 <UserPlus className="h-5 w-5" aria-hidden="true" />
                 Sign in to save
               </Link>
             )}
           </div>
-        </div>
+        </aside>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.05fr)]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(430px,1.08fr)]">
         <form className="utility-panel no-print p-4 sm:p-5" onSubmit={onGenerate} noValidate>
+          <div className="form-section-title mb-5">
+            <div>
+              <p className="panel-kicker">Scope intake</p>
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--ink)]">
+                Build the approval record
+              </h2>
+            </div>
+            <span className="hidden rounded-md border border-[var(--border)] bg-[var(--paper-soft)] px-3 py-2 font-mono text-sm font-bold text-[var(--ink-soft)] sm:inline-flex">
+              Draft v2
+            </span>
+          </div>
           {hasErrors ? (
-            <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">
+            <div className="mb-5 rounded-lg border border-[color:oklch(0.72_0.08_25)] bg-[var(--danger-soft)] p-3 text-sm font-semibold text-[var(--danger)]">
               Review the highlighted fields. The document is easier to defend when the scope
               details are complete.
             </div>
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="grid gap-2 text-sm font-bold text-slate-800 md:col-span-2">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)] md:col-span-2">
               Document title
               <input
                 className="field-control"
@@ -562,7 +591,7 @@ export function ChangeOrderGenerator({
               <InputError id="documentTitle-error" message={errors.documentTitle} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Your business
               <input
                 className="field-control"
@@ -576,7 +605,7 @@ export function ChangeOrderGenerator({
               <InputError id="provider-error" message={errors.provider} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Client
               <input
                 className="field-control"
@@ -590,7 +619,7 @@ export function ChangeOrderGenerator({
               <InputError id="client-error" message={errors.client} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Business email
               <input
                 className="field-control"
@@ -605,7 +634,7 @@ export function ChangeOrderGenerator({
               <InputError id="businessEmail-error" message={errors.businessEmail} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Business phone
               <input
                 className="field-control"
@@ -615,7 +644,7 @@ export function ChangeOrderGenerator({
               />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Project
               <input
                 className="field-control"
@@ -624,7 +653,7 @@ export function ChangeOrderGenerator({
               />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Industry
               <select
                 className="field-control"
@@ -640,8 +669,10 @@ export function ChangeOrderGenerator({
             </label>
           </div>
 
-          <div className="mt-4 grid gap-4">
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+          <div className="mt-5 border-t border-[var(--border)] pt-5">
+            <p className="panel-kicker mb-4">Scope boundary</p>
+            <div className="grid gap-4">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Original agreed scope
               <textarea
                 className="field-control"
@@ -651,13 +682,13 @@ export function ChangeOrderGenerator({
                 ref={(node) => registerFirstError("originalScope", node)}
                 onChange={(event) => setTextField("originalScope", event.target.value)}
               />
-              <span id="originalScope-help" className="text-sm font-medium text-slate-500">
+              <span id="originalScope-help" className="text-sm font-medium text-[var(--muted)]">
                 What was already included before the new request?
               </span>
               <InputError id="originalScope-error" message={errors.originalScope} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               New client request
               <textarea
                 className="field-control"
@@ -667,13 +698,13 @@ export function ChangeOrderGenerator({
                 ref={(node) => registerFirstError("newRequest", node)}
                 onChange={(event) => setTextField("newRequest", event.target.value)}
               />
-              <span id="newRequest-help" className="text-sm font-medium text-slate-500">
+              <span id="newRequest-help" className="text-sm font-medium text-[var(--muted)]">
                 Paste the client&apos;s text or summarize the added work clearly.
               </span>
               <InputError id="newRequest-error" message={errors.newRequest} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Schedule impact
               <textarea
                 className="field-control"
@@ -682,7 +713,7 @@ export function ChangeOrderGenerator({
               />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Exclusions and scope boundary
               <textarea
                 className="field-control"
@@ -690,10 +721,13 @@ export function ChangeOrderGenerator({
                 onChange={(event) => setTextField("exclusions", event.target.value)}
               />
             </label>
+            </div>
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-3">
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+          <div className="mt-5 border-t border-[var(--border)] pt-5">
+            <p className="panel-kicker mb-4">Pricing math</p>
+            <div className="grid gap-4 md:grid-cols-3">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Extra labor hours
               <input
                 className="field-control"
@@ -709,7 +743,7 @@ export function ChangeOrderGenerator({
               <InputError id="laborHours-error" message={errors.laborHours} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Hourly rate
               <input
                 className="field-control"
@@ -725,7 +759,7 @@ export function ChangeOrderGenerator({
               <InputError id="hourlyRate-error" message={errors.hourlyRate} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Materials cost
               <input
                 className="field-control"
@@ -741,7 +775,7 @@ export function ChangeOrderGenerator({
               <InputError id="materialsCost-error" message={errors.materialsCost} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Margin/overhead %
               <input
                 className="field-control"
@@ -758,7 +792,7 @@ export function ChangeOrderGenerator({
               <InputError id="marginPercent-error" message={errors.marginPercent} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Rush/disruption %
               <input
                 className="field-control"
@@ -775,7 +809,7 @@ export function ChangeOrderGenerator({
               <InputError id="rushPercent-error" message={errors.rushPercent} />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Deposit %
               <input
                 className="field-control"
@@ -791,10 +825,11 @@ export function ChangeOrderGenerator({
               />
               <InputError id="depositPercent-error" message={errors.depositPercent} />
             </label>
+            </div>
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-3">
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+          <div className="mt-5 grid gap-4 border-t border-[var(--border)] pt-5 md:grid-cols-3">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Payment timing
               <select
                 className="field-control"
@@ -811,7 +846,7 @@ export function ChangeOrderGenerator({
               </select>
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Approval deadline
               <input
                 className="field-control"
@@ -821,7 +856,7 @@ export function ChangeOrderGenerator({
               />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Email tone
               <select
                 className="field-control"
@@ -858,16 +893,18 @@ export function ChangeOrderGenerator({
           </div>
         </form>
 
-        <section ref={outputRef} className="utility-panel print-area p-4 sm:p-5">
+        <section ref={outputRef} className="utility-panel print-area p-4 sm:p-5 xl:sticky xl:top-24 xl:self-start">
           <div className="no-print mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-teal-800">
+              <p className="panel-kicker">
                 <FileText className="h-4 w-4" aria-hidden="true" />
                 Client-ready output
               </p>
-              <h2 className="mt-2 text-2xl font-black text-slate-950">Review, save, or send.</h2>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--ink)]">
+                Review, save, or send.
+              </h2>
             </div>
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-900">
+            <div className="rounded-lg border border-[color:oklch(0.75_0.08_75)] bg-[var(--warning-soft)] p-3 text-sm font-semibold leading-6 text-[color:oklch(0.34_0.08_62)]">
               Business template only. Review your contract and local laws before using late
               fees, interest, liens, or legal escalation.
             </div>
@@ -875,34 +912,34 @@ export function ChangeOrderGenerator({
 
           <div className="no-print grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
                 Labor
               </span>
-              <strong className="mt-2 block font-mono text-2xl text-slate-950">
+              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
                 {formatMoney(generated.breakdown.labor, input.currency)}
               </strong>
             </div>
             <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
                 Materials
               </span>
-              <strong className="mt-2 block font-mono text-2xl text-slate-950">
+              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
                 {formatMoney(generated.breakdown.materials, input.currency)}
               </strong>
             </div>
             <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
                 Deposit
               </span>
-              <strong className="mt-2 block font-mono text-2xl text-slate-950">
+              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
                 {formatMoney(generated.breakdown.depositAmount, input.currency)}
               </strong>
             </div>
             <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
                 Total
               </span>
-              <strong className="mt-2 block font-mono text-2xl text-slate-950">
+              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
                 {formatMoney(generated.breakdown.total, input.currency)}
               </strong>
             </div>
@@ -985,19 +1022,19 @@ export function ChangeOrderGenerator({
             )}
           </div>
 
-          <div aria-live="polite" className="no-print mt-3 min-h-6 text-sm font-bold text-teal-800">
+          <div aria-live="polite" className="no-print mt-3 min-h-6 text-sm font-bold text-[var(--accent-strong)]">
             {toast}
           </div>
 
-          <div className="no-print mt-5 border-t border-slate-200 pt-5">
-            <h3 className="flex items-center gap-2 text-base font-black text-slate-950">
-              <CheckCircle2 className="h-5 w-5 text-teal-700" aria-hidden="true" />
+          <div className="no-print mt-5 border-t border-[var(--border)] pt-5">
+            <h3 className="flex items-center gap-2 text-base font-black text-[var(--ink)]">
+              <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" aria-hidden="true" />
               Before sending
             </h3>
-            <ul className="mt-3 grid gap-2 text-sm leading-6 text-slate-700">
+            <ul className="mt-3 grid gap-2 text-sm leading-6 text-[var(--ink-soft)]">
               {generated.checklist.map((item) => (
                 <li key={item} className="flex gap-2">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-700" />
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
                   <span>{item}</span>
                 </li>
               ))}

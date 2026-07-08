@@ -1,11 +1,24 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/react";
+import localFont from "next/font/local";
 import Link from "next/link";
 import { signOutAction } from "@/app/actions/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://changeorderkit.com";
+
+const geistSans = localFont({
+  src: "../../node_modules/next/dist/next-devtools/server/font/geist-latin.woff2",
+  variable: "--font-geist-sans",
+  display: "swap"
+});
+
+const geistMono = localFont({
+  src: "../../node_modules/next/dist/next-devtools/server/font/geist-mono-latin.woff2",
+  variable: "--font-geist-mono",
+  display: "swap"
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -40,57 +53,57 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body className="font-sans antialiased">
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-slate-950"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--paper)] focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-[var(--ink)]"
         >
           Skip to main content
         </a>
-        <header className="no-print border-b border-slate-200/80 bg-white/80 backdrop-blur">
-          <div className="tool-shell flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <Link href="/" className="flex items-center gap-3" aria-label="ChangeOrderKit home">
-              <span className="grid h-10 w-10 place-items-center rounded-lg bg-slate-950 text-sm font-black text-white">
-                CO
+        <header className="app-header no-print">
+          <div className="tool-shell flex flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <Link href="/" className="brand-lockup" aria-label="ChangeOrderKit home">
+              <span className="brand-mark" aria-hidden="true">
+                <span>CO</span>
               </span>
               <span>
-                <span className="block text-lg font-black leading-none text-slate-950">
+                <span className="block text-lg font-black leading-none tracking-tight text-[var(--ink)]">
                   ChangeOrderKit
                 </span>
-                <span className="block text-sm text-slate-600">
-                  Get extra work approved before you start.
+                <span className="block text-sm font-medium text-[var(--muted)]">
+                  Extra work priced before it starts.
                 </span>
               </span>
             </Link>
-            <nav className="flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-700">
-              <Link className="hover:text-teal-700" href="/dashboard">
+            <nav className="site-nav" aria-label="Primary navigation">
+              <Link className="nav-link" href="/dashboard">
                 Dashboard
               </Link>
-              <Link className="hover:text-teal-700" href="/kit">
+              <Link className="nav-link" href="/kit">
                 Kit
               </Link>
-              <Link className="hover:text-teal-700" href="/change-order-template">
+              <Link className="nav-link" href="/change-order-template">
                 Template
               </Link>
-              <Link className="hover:text-teal-700" href="/contractor-change-order-calculator">
+              <Link className="nav-link" href="/contractor-change-order-calculator">
                 Calculator
               </Link>
-              <Link className="hover:text-teal-700" href="/scope-creep-email-generator">
+              <Link className="nav-link" href="/scope-creep-email-generator">
                 Scope email
               </Link>
               {isSignedIn ? (
                 <>
-                  <Link className="hover:text-teal-700" href="/settings">
+                  <Link className="nav-link" href="/settings">
                     Settings
                   </Link>
                   <form action={signOutAction}>
-                    <button className="font-semibold hover:text-teal-700" type="submit">
+                    <button className="nav-link" type="submit">
                       Sign out
                     </button>
                   </form>
                 </>
               ) : (
-                <Link className="hover:text-teal-700" href="/sign-in">
+                <Link className="nav-link nav-link-strong" href="/sign-in">
                   Sign in
                 </Link>
               )}
@@ -98,14 +111,16 @@ export default async function RootLayout({
           </div>
         </header>
         <main id="main">{children}</main>
-        <footer className="no-print mt-12 border-t border-slate-200 bg-white">
-          <div className="tool-shell flex flex-col gap-3 py-8 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-            <p>ChangeOrderKit creates business templates, not legal advice.</p>
-            <div className="flex gap-4 font-semibold">
-              <Link href="/privacy" className="hover:text-teal-700">
+        <footer className="app-footer no-print">
+          <div className="tool-shell flex flex-col gap-4 py-8 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="max-w-[65ch] text-[var(--muted)]">
+              ChangeOrderKit creates business templates and math checks, not legal advice.
+            </p>
+            <div className="flex gap-4 font-bold">
+              <Link href="/privacy" className="footer-link">
                 Privacy
               </Link>
-              <Link href="/terms" className="hover:text-teal-700">
+              <Link href="/terms" className="footer-link">
                 Terms
               </Link>
             </div>

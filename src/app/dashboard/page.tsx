@@ -40,7 +40,7 @@ function StatusPill({ status }: { status: SavedChangeOrder["status"] }) {
   const label = status === "archived" ? "Archived" : status === "ready" ? "Ready" : "Draft";
 
   return (
-    <span className="inline-flex min-h-7 items-center rounded-full border border-slate-200 bg-white px-2.5 text-xs font-black uppercase tracking-[0.1em] text-slate-600">
+    <span className="inline-flex min-h-7 items-center rounded-full border border-[var(--border)] bg-[var(--paper)] px-2.5 text-xs font-black uppercase tracking-[0.1em] text-[var(--muted)]">
       {label}
     </span>
   );
@@ -48,11 +48,11 @@ function StatusPill({ status }: { status: SavedChangeOrder["status"] }) {
 
 function EmptyState({ archived = false }: { archived?: boolean }) {
   return (
-    <div className="utility-panel p-5">
-      <h2 className="text-xl font-black text-slate-950">
+    <div className="workspace-panel p-5">
+      <h2 className="text-xl font-black tracking-tight text-[var(--ink)]">
         {archived ? "No archived change orders" : "No saved change orders yet"}
       </h2>
-      <p className="mt-2 max-w-2xl leading-7 text-slate-700">
+      <p className="mt-2 max-w-[65ch] leading-7 text-[var(--ink-soft)]">
         {archived
           ? "Archived work will appear here when you move old drafts out of the active list."
           : "Create a saved draft from the dashboard or save the visitor generator after signing in."}
@@ -69,22 +69,24 @@ function EmptyState({ archived = false }: { archived?: boolean }) {
 
 function ChangeOrderList({ orders }: { orders: SavedChangeOrder[] }) {
   return (
-    <div className="grid gap-3">
+    <div className="workspace-panel px-4 sm:px-5">
       {orders.map((order) => (
-        <article key={order.id} className="utility-panel p-4">
+        <article key={order.id} className="workspace-row">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill status={order.status} />
-                <span className="text-sm font-semibold text-slate-500">
+                <span className="text-sm font-semibold text-[var(--muted)]">
                   Updated {formatUpdatedAt(order.updatedAt)}
                 </span>
               </div>
-              <h2 className="mt-3 text-xl font-black text-slate-950">{order.title}</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-600">
+              <h2 className="mt-3 text-xl font-black tracking-tight text-[var(--ink)]">
+                {order.title}
+              </h2>
+              <p className="mt-1 text-sm font-semibold text-[var(--muted)]">
                 {order.clientName || "No client"} - {order.projectName || "No project"}
               </p>
-              <p className="mt-3 font-mono text-2xl font-black text-slate-950">
+              <p className="mt-3 font-mono text-2xl font-black text-[var(--ink)]">
                 {formatMoney(order.total, order.currency)}
               </p>
             </div>
@@ -162,12 +164,14 @@ export default async function DashboardPage() {
     <section className="tool-shell py-8 sm:py-10">
       <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div>
-          <p className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-teal-800">
+          <p className="panel-kicker">
             <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
             Saved workspace
           </p>
-          <h1 className="mt-2 text-4xl font-black text-slate-950">Change orders</h1>
-          <p className="mt-3 max-w-3xl leading-7 text-slate-700">
+          <h1 className="mt-2 text-4xl font-black tracking-tight text-[var(--ink)] sm:text-5xl">
+            Change orders
+          </h1>
+          <p className="mt-3 max-w-[65ch] leading-7 text-[var(--ink-soft)]">
             {profile?.businessName
               ? `${profile.businessName} defaults are ready for new drafts.`
               : "Save drafts, duplicate repeat jobs, and keep approved extra work organized."}
@@ -186,7 +190,7 @@ export default async function DashboardPage() {
       </div>
 
       {orderError ? (
-        <p className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
+        <p className="mb-5 rounded-lg border border-[color:oklch(0.72_0.08_25)] bg-[var(--danger-soft)] p-3 text-sm font-bold text-[var(--danger)]">
           {orderError.message}
         </p>
       ) : null}
@@ -195,7 +199,7 @@ export default async function DashboardPage() {
         {activeOrders.length > 0 ? <ChangeOrderList orders={activeOrders} /> : <EmptyState />}
 
         <section>
-          <h2 className="mb-3 text-xl font-black text-slate-950">Archived</h2>
+          <h2 className="mb-3 text-xl font-black tracking-tight text-[var(--ink)]">Archived</h2>
           {archivedOrders.length > 0 ? (
             <ChangeOrderList orders={archivedOrders} />
           ) : (

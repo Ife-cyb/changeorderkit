@@ -14,14 +14,14 @@ export default function KitPage() {
     <section className="tool-shell py-8 sm:py-10">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(320px,0.45fr)] lg:items-start">
         <div>
-          <p className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-teal-800">
+          <p className="panel-kicker">
             <PackageCheck className="h-4 w-4" aria-hidden="true" />
             Gumroad template kit
           </p>
-          <h1 className="mt-2 max-w-4xl text-4xl font-black leading-tight text-slate-950 sm:text-5xl">
+          <h1 className="mt-2 max-w-4xl text-4xl font-black leading-tight tracking-tight text-[var(--ink)] sm:text-5xl">
             Client-ready templates for contractors who need tighter project paperwork.
           </h1>
-          <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-700">
+          <p className="mt-4 max-w-[65ch] text-lg leading-8 text-[var(--ink-soft)]">
             The app stays free to use. The paid kit links out to Gumroad for checkout and file
             delivery, so ChangeOrderKit does not process payments or store purchase records.
           </p>
@@ -44,12 +44,14 @@ export default function KitPage() {
           </div>
         </div>
 
-        <aside className="utility-panel p-5">
-          <h2 className="flex items-center gap-2 text-xl font-black text-slate-950">
-            <Download className="h-5 w-5 text-teal-700" aria-hidden="true" />
-            Kit contents
-          </h2>
-          <ul className="mt-4 grid gap-3 text-sm leading-6 text-slate-700">
+        <aside className="ledger-rail overflow-hidden">
+          <div className="p-5">
+            <h2 className="flex items-center gap-2 text-xl font-black tracking-tight text-[var(--paper)]">
+              <Download className="h-5 w-5 text-[color:oklch(0.77_0.04_155)]" aria-hidden="true" />
+              Kit contents
+            </h2>
+          </div>
+          <ul className="grid text-sm leading-6">
             {[
               "Printable change-order template",
               "Scope-creep email scripts",
@@ -57,9 +59,11 @@ export default function KitPage() {
               "Invoice note and payment schedule examples",
               "Late invoice follow-up templates"
             ].map((item) => (
-              <li key={item} className="flex gap-2">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-700" />
-                <span>{item}</span>
+              <li key={item} className="ledger-row">
+                <span className="flex gap-2 text-[color:oklch(0.86_0.012_115)]">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[color:oklch(0.77_0.04_155)]" />
+                  {item}
+                </span>
               </li>
             ))}
           </ul>

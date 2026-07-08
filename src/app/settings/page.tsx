@@ -3,9 +3,7 @@ import { redirect } from "next/navigation";
 import { Save, Settings } from "lucide-react";
 import { updateProfileAction } from "@/app/actions/settings";
 import { SetupNotice } from "@/components/setup-notice";
-import {
-  profileFromRow
-} from "@/lib/change-order-records";
+import { profileFromRow } from "@/lib/change-order-records";
 import { defaultBusinessProfile, type PaymentTiming, type Tone } from "@/lib/change-order";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -60,31 +58,41 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
     <section className="tool-shell py-8 sm:py-10">
       <div className="mx-auto max-w-4xl">
         <div className="mb-6">
-          <p className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-teal-800">
+          <p className="panel-kicker">
             <Settings className="h-4 w-4" aria-hidden="true" />
             Business defaults
           </p>
-          <h1 className="mt-2 text-4xl font-black text-slate-950">Settings</h1>
-          <p className="mt-3 max-w-3xl leading-7 text-slate-700">
+          <h1 className="mt-2 text-4xl font-black tracking-tight text-[var(--ink)] sm:text-5xl">
+            Settings
+          </h1>
+          <p className="mt-3 max-w-[65ch] leading-7 text-[var(--ink-soft)]">
             These defaults prefill new saved change orders and keep document headers consistent.
           </p>
         </div>
 
         {message ? (
-          <p className="mb-4 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm font-bold text-teal-900">
+          <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--accent-soft)] p-3 text-sm font-bold text-[var(--accent-strong)]">
             {message}
           </p>
         ) : null}
 
         {error ? (
-          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
+          <p className="mb-4 rounded-lg border border-[color:oklch(0.72_0.08_25)] bg-[var(--danger-soft)] p-3 text-sm font-bold text-[var(--danger)]">
             {error}
           </p>
         ) : null}
 
         <form action={updateProfileAction} className="utility-panel grid gap-5 p-5 sm:p-6">
+          <div className="form-section-title">
+            <div>
+              <p className="panel-kicker">Reusable profile</p>
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--ink)]">
+                Default job paperwork
+              </h2>
+            </div>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Business name
               <input
                 className="field-control"
@@ -93,7 +101,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
                 autoComplete="organization"
               />
             </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Contact email
               <input
                 className="field-control"
@@ -103,7 +111,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
                 autoComplete="email"
               />
             </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Phone
               <input
                 className="field-control"
@@ -112,7 +120,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
                 autoComplete="tel"
               />
             </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Default hourly rate
               <input
                 className="field-control"
@@ -123,7 +131,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
                 defaultValue={profile.defaultHourlyRate}
               />
             </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Default margin %
               <input
                 className="field-control"
@@ -135,7 +143,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
                 defaultValue={profile.defaultMarginPercent}
               />
             </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Default deposit %
               <input
                 className="field-control"
@@ -147,7 +155,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
                 defaultValue={profile.defaultDepositPercent}
               />
             </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Default payment timing
               <select
                 className="field-control"
@@ -161,7 +169,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
                 ))}
               </select>
             </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Default tone
               <select className="field-control" name="defaultTone" defaultValue={profile.defaultTone}>
                 {tones.map((tone) => (
