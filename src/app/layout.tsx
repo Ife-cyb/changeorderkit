@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/react";
 import Link from "next/link";
+import { signOutAction } from "@/app/actions/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://changeorderkit.com";
@@ -23,11 +25,19 @@ export const metadata: Metadata = {
   }
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabase = await createSupabaseServerClient();
+  let isSignedIn = false;
+
+  if (supabase) {
+    const { data } = await supabase.auth.getClaims();
+    isSignedIn = typeof data?.claims?.sub === "string";
+  }
+
   return (
     <html lang="en">
       <body className="font-sans antialiased">
@@ -53,6 +63,12 @@ export default function RootLayout({
               </span>
             </Link>
             <nav className="flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-700">
+              <Link className="hover:text-teal-700" href="/dashboard">
+                Dashboard
+              </Link>
+              <Link className="hover:text-teal-700" href="/kit">
+                Kit
+              </Link>
               <Link className="hover:text-teal-700" href="/change-order-template">
                 Template
               </Link>
@@ -62,6 +78,22 @@ export default function RootLayout({
               <Link className="hover:text-teal-700" href="/scope-creep-email-generator">
                 Scope email
               </Link>
+              {isSignedIn ? (
+                <>
+                  <Link className="hover:text-teal-700" href="/settings">
+                    Settings
+                  </Link>
+                  <form action={signOutAction}>
+                    <button className="font-semibold hover:text-teal-700" type="submit">
+                      Sign out
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <Link className="hover:text-teal-700" href="/sign-in">
+                  Sign in
+                </Link>
+              )}
             </nav>
           </div>
         </header>

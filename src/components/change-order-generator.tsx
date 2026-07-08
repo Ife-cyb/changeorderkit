@@ -8,18 +8,28 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Mail,
   Printer,
   RotateCcw,
-  ShieldCheck
+  Save,
+  ShieldCheck,
+  UserPlus
 } from "lucide-react";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { saveChangeOrderAction } from "@/app/actions/change-orders";
 import {
-  ChangeOrderInput,
+  type BusinessProfile,
+  type ChangeOrderInput,
+  type GeneratedChangeOrder,
   createDefaultInput,
   defaultInput,
+  formatDate,
   formatMoney,
   generateChangeOrder,
   getPaymentState,
+  getTemplateKitState,
   sanitizeChangeOrderInput,
   validateChangeOrder,
   type Industry,
@@ -29,11 +39,19 @@ import {
 } from "@/lib/change-order";
 import { trackEvent } from "@/lib/tracking";
 
+type OutputMode = "document" | "email" | "invoice" | "follow-up";
+
 type Props = {
   paymentLink?: string;
+  templateKitLink?: string;
+  initialInput?: ChangeOrderInput;
+  savedOrderId?: string;
+  isSignedIn?: boolean;
+  businessProfile?: BusinessProfile | null;
+  useLocalDraft?: boolean;
 };
 
-const storageKey = "changeorderkit:draft:v1";
+const storageKey = "changeorderkit:draft:v2";
 
 const industries: Array<{ value: Industry; label: string }> = [
   { value: "remodeling", label: "Remodeling" },
@@ -54,6 +72,13 @@ const paymentTimings: Array<{ value: PaymentTiming; label: string }> = [
   { value: "deposit-before", label: "Deposit before added work begins" },
   { value: "completion", label: "Due when added work is complete" },
   { value: "next-invoice", label: "Add to next invoice" }
+];
+
+const outputModes: Array<{ value: OutputMode; label: string }> = [
+  { value: "document", label: "Document" },
+  { value: "email", label: "Email" },
+  { value: "invoice", label: "Invoice note" },
+  { value: "follow-up", label: "Follow-up" }
 ];
 
 function parseSavedDraft(value: string | null): ChangeOrderInput | null {
@@ -105,11 +130,168 @@ function InputError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-export function ChangeOrderGenerator({ paymentLink }: Props) {
-  const [input, setInput] = useState<ChangeOrderInput>(defaultInput);
+function outputText(generated: GeneratedChangeOrder, mode: OutputMode) {
+  if (mode === "email") {
+    return generated.clientEmail;
+  }
+
+  if (mode === "invoice") {
+    return generated.invoiceNote;
+  }
+
+  if (mode === "follow-up") {
+    return generated.followUpTemplate;
+  }
+
+  return generated.changeOrderDocument;
+}
+
+function outputFilename(mode: OutputMode) {
+  const names: Record<OutputMode, string> = {
+    document: "change-order-document.txt",
+    email: "change-order-email.txt",
+    invoice: "change-order-invoice-note.txt",
+    "follow-up": "change-order-follow-up.txt"
+  };
+
+  return names[mode];
+}
+
+function PrintableDocument({
+  input,
+  generated
+}: {
+  input: ChangeOrderInput;
+  generated: GeneratedChangeOrder;
+}) {
+  return (
+    <div className="print-document" aria-label="Printable change order document">
+      <header className="print-document-header">
+        <div>
+          <p className="print-kicker">Change order</p>
+          <h2>{generated.documentTitle}</h2>
+        </div>
+        <div className="print-business">
+          <strong>{input.provider || "Your business"}</strong>
+          <span>{input.businessEmail || "Email not provided"}</span>
+          <span>{input.businessPhone || "Phone not provided"}</span>
+        </div>
+      </header>
+
+      <div className="print-meta-grid">
+        <div>
+          <span>Client</span>
+          <strong>{input.client || "Client"}</strong>
+        </div>
+        <div>
+          <span>Project</span>
+          <strong>{input.project || "Project"}</strong>
+        </div>
+        <div>
+          <span>Approval deadline</span>
+          <strong>{formatDate(input.approvalDeadline)}</strong>
+        </div>
+      </div>
+
+      <section>
+        <h3>Original approved scope</h3>
+        <p>{input.originalScope || "Original scope not provided."}</p>
+      </section>
+
+      <section>
+        <h3>Requested added work</h3>
+        <p>{input.newRequest || "Requested change not provided."}</p>
+      </section>
+
+      <section>
+        <h3>Schedule impact</h3>
+        <p>{input.scheduleImpact || "No schedule impact noted."}</p>
+      </section>
+
+      <section>
+        <h3>Pricing</h3>
+        <table>
+          <tbody>
+            <tr>
+              <th scope="row">Labor</th>
+              <td>{formatMoney(generated.breakdown.labor, input.currency)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Materials and direct costs</th>
+              <td>{formatMoney(generated.breakdown.materials, input.currency)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Margin/overhead</th>
+              <td>{formatMoney(generated.breakdown.marginAmount, input.currency)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Rush/disruption</th>
+              <td>{formatMoney(generated.breakdown.rushAmount, input.currency)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Deposit</th>
+              <td>{formatMoney(generated.breakdown.depositAmount, input.currency)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Balance</th>
+              <td>{formatMoney(generated.breakdown.balanceAmount, input.currency)}</td>
+            </tr>
+            <tr className="total-row">
+              <th scope="row">Total</th>
+              <td>{formatMoney(generated.breakdown.total, input.currency)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h3>Payment terms</h3>
+        <p>{generated.paymentTerms}</p>
+      </section>
+
+      <section>
+        <h3>Scope boundary</h3>
+        <p>{input.exclusions || "No additional exclusions listed."}</p>
+        <p>{generated.approvalText}</p>
+      </section>
+
+      <section className="signature-grid">
+        <div>
+          <span>Client name</span>
+          <i />
+        </div>
+        <div>
+          <span>Signature</span>
+          <i />
+        </div>
+        <div>
+          <span>Date</span>
+          <i />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function ChangeOrderGenerator({
+  paymentLink,
+  templateKitLink,
+  initialInput,
+  savedOrderId,
+  isSignedIn = false,
+  businessProfile,
+  useLocalDraft = true
+}: Props) {
+  const router = useRouter();
+  const [input, setInput] = useState<ChangeOrderInput>(() =>
+    sanitizeChangeOrderInput(initialInput ?? defaultInput)
+  );
+  const [currentOrderId, setCurrentOrderId] = useState(savedOrderId ?? "");
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [toast, setToast] = useState("");
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [outputMode, setOutputMode] = useState<OutputMode>("document");
+  const [isSaving, startSaving] = useTransition();
   const outputRef = useRef<HTMLDivElement>(null);
   const toastTimerRef = useRef<number | null>(null);
   const firstErrorRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(
@@ -118,25 +300,28 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
 
   const generated = useMemo(() => generateChangeOrder(input), [input]);
   const paymentState = getPaymentState(paymentLink);
+  const kitState = getTemplateKitState(templateKitLink);
   const hasErrors = Object.keys(errors).length > 0;
+  const selectedOutput = outputText(generated, outputMode);
 
   useEffect(() => {
     const restoreId = window.setTimeout(() => {
-      setInput(readSavedDraft() ?? createDefaultInput());
-
+      const fallback = createDefaultInput(businessProfile ?? undefined);
+      const restored = useLocalDraft ? readSavedDraft() : null;
+      setInput(restored ?? sanitizeChangeOrderInput(initialInput ?? fallback));
       setDraftLoaded(true);
     }, 0);
 
     return () => window.clearTimeout(restoreId);
-  }, []);
+  }, [businessProfile, initialInput, useLocalDraft]);
 
   useEffect(() => {
-    if (!draftLoaded) {
+    if (!draftLoaded || !useLocalDraft) {
       return;
     }
 
     writeSavedDraft(input);
-  }, [draftLoaded, input]);
+  }, [draftLoaded, input, useLocalDraft]);
 
   useEffect(() => {
     return () => {
@@ -206,6 +391,38 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
     });
   }
 
+  function saveToAccount() {
+    if (!runValidation()) {
+      showToast("Fix the highlighted fields before saving.");
+      return;
+    }
+
+    if (!isSignedIn) {
+      router.push(`/sign-in?next=${encodeURIComponent("/")}`);
+      return;
+    }
+
+    startSaving(async () => {
+      const result = await saveChangeOrderAction(input, currentOrderId || null);
+
+      if (!result.ok) {
+        showToast(result.error);
+        return;
+      }
+
+      if (result.id) {
+        setCurrentOrderId(result.id);
+
+        if (window.location.pathname.endsWith("/new")) {
+          router.replace(`/dashboard/change-orders/${result.id}`);
+        }
+      }
+
+      showToast("Change order saved.");
+      trackEvent("change_order_saved", { industry: input.industry });
+    });
+  }
+
   async function copyDocument() {
     if (!runValidation()) {
       showToast("Fix the highlighted fields before copying.");
@@ -213,9 +430,9 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
     }
 
     try {
-      await navigator.clipboard.writeText(generated.fullDocument);
+      await navigator.clipboard.writeText(selectedOutput);
       showToast("Copied to clipboard.");
-      trackEvent("change_order_copied", { industry: input.industry });
+      trackEvent("change_order_copied", { industry: input.industry, output: outputMode });
     } catch {
       showToast("Copy failed. Select the document text and copy manually.");
     }
@@ -227,17 +444,17 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
       return;
     }
 
-    const blob = new Blob([generated.fullDocument], { type: "text/plain" });
+    const blob = new Blob([selectedOutput], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "change-order.txt";
+    link.download = outputFilename(outputMode);
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
     showToast("Downloaded text file.");
-    trackEvent("change_order_downloaded", { industry: input.industry });
+    trackEvent("change_order_downloaded", { industry: input.industry, output: outputMode });
   }
 
   function printDocument() {
@@ -246,13 +463,14 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
       return;
     }
 
+    setOutputMode("document");
     trackEvent("change_order_printed", { industry: input.industry });
-    window.print();
+    window.setTimeout(() => window.print(), 0);
   }
 
   function resetDraft() {
     clearSavedDraft();
-    setInput(createDefaultInput());
+    setInput(createDefaultInput(businessProfile ?? undefined));
     setErrors({});
     showToast("Example draft restored.");
     trackEvent("draft_reset");
@@ -268,6 +486,16 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
     trackEvent("payment_cta_clicked");
   }
 
+  function handleKitClick() {
+    if (!kitState.configured) {
+      showToast("Template kit link not configured yet.");
+      trackEvent("template_kit_link_missing");
+      return;
+    }
+
+    trackEvent("template_kit_cta_clicked");
+  }
+
   return (
     <section className="tool-shell py-8 sm:py-10" aria-label="Change order generator">
       <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(280px,0.45fr)] lg:items-end">
@@ -280,18 +508,32 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             Turn client changes into approved, paid work before you start.
           </h1>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-700">
-            Price the extra request, write the approval email, and keep a cleaner project
-            record in under five minutes.
+            Price the extra request, write the approval email, and produce a cleaner client-ready
+            change-order document.
           </p>
         </div>
         <div className="utility-panel no-print p-4">
           <p className="text-sm font-black uppercase tracking-[0.16em] text-slate-500">
-            This draft autosaves
+            {isSignedIn ? "Workspace enabled" : "Free browser draft"}
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-700">
-            Your entries stay in this browser only. No account, database, or payment setup is
-            required to use the free generator.
+            {isSignedIn
+              ? "Save drafts to your dashboard and reuse your business defaults."
+              : "Your entries autosave in this browser. Sign in when you want saved records."}
           </p>
+          <div className="mt-3 flex flex-col gap-2">
+            {isSignedIn ? (
+              <Link className="btn btn-secondary" href="/dashboard">
+                <FileText className="h-5 w-5" aria-hidden="true" />
+                Dashboard
+              </Link>
+            ) : (
+              <Link className="btn btn-secondary" href="/sign-in?next=/">
+                <UserPlus className="h-5 w-5" aria-hidden="true" />
+                Sign in to save
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
@@ -305,6 +547,21 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-2">
+            <label className="grid gap-2 text-sm font-bold text-slate-800 md:col-span-2">
+              Document title
+              <input
+                className="field-control"
+                value={input.documentTitle}
+                aria-invalid={Boolean(errors.documentTitle)}
+                aria-describedby={errors.documentTitle ? "documentTitle-error" : undefined}
+                ref={(node) => registerFirstError("documentTitle", node)}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  setTextField("documentTitle", event.target.value)
+                }
+              />
+              <InputError id="documentTitle-error" message={errors.documentTitle} />
+            </label>
+
             <label className="grid gap-2 text-sm font-bold text-slate-800">
               Your business
               <input
@@ -314,9 +571,7 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
                 aria-invalid={Boolean(errors.provider)}
                 aria-describedby={errors.provider ? "provider-error" : undefined}
                 ref={(node) => registerFirstError("provider", node)}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  setTextField("provider", event.target.value)
-                }
+                onChange={(event) => setTextField("provider", event.target.value)}
               />
               <InputError id="provider-error" message={errors.provider} />
             </label>
@@ -333,6 +588,31 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
                 onChange={(event) => setTextField("client", event.target.value)}
               />
               <InputError id="client-error" message={errors.client} />
+            </label>
+
+            <label className="grid gap-2 text-sm font-bold text-slate-800">
+              Business email
+              <input
+                className="field-control"
+                value={input.businessEmail}
+                type="email"
+                autoComplete="email"
+                aria-invalid={Boolean(errors.businessEmail)}
+                aria-describedby={errors.businessEmail ? "businessEmail-error" : undefined}
+                ref={(node) => registerFirstError("businessEmail", node)}
+                onChange={(event) => setTextField("businessEmail", event.target.value)}
+              />
+              <InputError id="businessEmail-error" message={errors.businessEmail} />
+            </label>
+
+            <label className="grid gap-2 text-sm font-bold text-slate-800">
+              Business phone
+              <input
+                className="field-control"
+                value={input.businessPhone}
+                autoComplete="tel"
+                onChange={(event) => setTextField("businessPhone", event.target.value)}
+              />
             </label>
 
             <label className="grid gap-2 text-sm font-bold text-slate-800">
@@ -372,7 +652,7 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
                 onChange={(event) => setTextField("originalScope", event.target.value)}
               />
               <span id="originalScope-help" className="text-sm font-medium text-slate-500">
-                Keep this factual. What was already included before the new request?
+                What was already included before the new request?
               </span>
               <InputError id="originalScope-error" message={errors.originalScope} />
             </label>
@@ -391,6 +671,24 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
                 Paste the client&apos;s text or summarize the added work clearly.
               </span>
               <InputError id="newRequest-error" message={errors.newRequest} />
+            </label>
+
+            <label className="grid gap-2 text-sm font-bold text-slate-800">
+              Schedule impact
+              <textarea
+                className="field-control"
+                value={input.scheduleImpact}
+                onChange={(event) => setTextField("scheduleImpact", event.target.value)}
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-bold text-slate-800">
+              Exclusions and scope boundary
+              <textarea
+                className="field-control"
+                value={input.exclusions}
+                onChange={(event) => setTextField("exclusions", event.target.value)}
+              />
             </label>
           </div>
 
@@ -539,10 +837,19 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             </label>
           </div>
 
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <button type="submit" className="btn btn-primary">
               <Calculator className="h-5 w-5" aria-hidden="true" />
-              Generate change order
+              Generate
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={saveToAccount}
+              disabled={isSaving}
+            >
+              <Save className="h-5 w-5" aria-hidden="true" />
+              {isSaving ? "Saving" : currentOrderId ? "Save changes" : "Save"}
             </button>
             <button type="button" className="btn btn-secondary" onClick={resetDraft}>
               <RotateCcw className="h-5 w-5" aria-hidden="true" />
@@ -556,11 +863,9 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             <div>
               <p className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-teal-800">
                 <FileText className="h-4 w-4" aria-hidden="true" />
-                Ready-to-send output
+                Client-ready output
               </p>
-              <h2 className="mt-2 text-2xl font-black text-slate-950">
-                Review, copy, download, or print.
-              </h2>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">Review, save, or send.</h2>
             </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-900">
               Business template only. Review your contract and local laws before using late
@@ -568,7 +873,7 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="no-print grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="metric-box">
               <span className="block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
                 Labor
@@ -603,15 +908,35 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             </div>
           </div>
 
-          <div
-            className="document-preview mt-5"
-            tabIndex={0}
-            aria-label="Generated change order document"
-          >
-            {generated.fullDocument}
+          <div className="no-print mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Output type">
+            {outputModes.map((mode) => (
+              <button
+                key={mode.value}
+                type="button"
+                className={outputMode === mode.value ? "segment segment-active" : "segment"}
+                onClick={() => setOutputMode(mode.value)}
+                role="tab"
+                aria-selected={outputMode === mode.value}
+              >
+                {mode.value === "email" ? <Mail className="h-4 w-4" aria-hidden="true" /> : null}
+                {mode.label}
+              </button>
+            ))}
           </div>
 
-          <div className="no-print mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {outputMode === "document" ? (
+            <PrintableDocument input={input} generated={generated} />
+          ) : (
+            <div
+              className="document-preview mt-5"
+              tabIndex={0}
+              aria-label="Generated change order output"
+            >
+              {selectedOutput}
+            </div>
+          )}
+
+          <div className="no-print mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <button type="button" className="btn btn-primary" onClick={copyDocument}>
               <Copy className="h-5 w-5" aria-hidden="true" />
               Copy
@@ -624,6 +949,23 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
               <Printer className="h-5 w-5" aria-hidden="true" />
               Print / PDF
             </button>
+            {kitState.configured ? (
+              <a
+                className="btn btn-secondary"
+                href={kitState.href}
+                target="_blank"
+                rel="noreferrer"
+                onClick={handleKitClick}
+              >
+                <ExternalLink className="h-5 w-5" aria-hidden="true" />
+                Template kit
+              </a>
+            ) : (
+              <button type="button" className="btn btn-disabled" onClick={handleKitClick}>
+                <ExternalLink className="h-5 w-5" aria-hidden="true" />
+                Kit unavailable
+              </button>
+            )}
             {paymentState.configured ? (
               <a
                 className="btn btn-secondary"

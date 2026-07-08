@@ -6,6 +6,7 @@ import {
   formatMoney,
   generateChangeOrder,
   getPaymentState,
+  getTemplateKitState,
   sanitizeChangeOrderInput,
   validateChangeOrder
 } from "../src/lib/change-order";
@@ -46,7 +47,25 @@ describe("generated copy", () => {
     expect(generated.fullDocument).toContain("CHANGE ORDER");
     expect(generated.fullDocument).toContain("Please reply \"Approved\"");
     expect(generated.fullDocument).toContain("SCOPE BOUNDARY");
+    expect(generated.fullDocument).toContain("INVOICE NOTE");
+    expect(generated.fullDocument).toContain("FOLLOW-UP TEMPLATE");
     expect(generated.email).toContain(input.client);
+  });
+
+  it("includes phase 2 document fields in deterministic outputs", () => {
+    const generated = generateChangeOrder({
+      ...defaultInput,
+      documentTitle: "Garage change order",
+      scheduleImpact: "Adds two workdays.",
+      exclusions: "Permit revisions are excluded."
+    });
+
+    expect(generated.documentTitle).toBe("Garage change order");
+    expect(generated.changeOrderDocument).toContain("SCHEDULE IMPACT");
+    expect(generated.changeOrderDocument).toContain("Adds two workdays.");
+    expect(generated.changeOrderDocument).toContain("Permit revisions are excluded.");
+    expect(generated.invoiceNote).toContain("Approved change order");
+    expect(generated.followUpTemplate).toContain("follow up");
   });
 });
 
@@ -54,12 +73,14 @@ describe("validation", () => {
   it("requires core project context", () => {
     const errors = validateChangeOrder({
       ...defaultInput,
+      documentTitle: "",
       provider: "",
       client: "",
       originalScope: "",
       newRequest: ""
     });
 
+    expect(errors.documentTitle).toBeTruthy();
     expect(errors.provider).toBeTruthy();
     expect(errors.client).toBeTruthy();
     expect(errors.originalScope).toBeTruthy();
@@ -76,7 +97,9 @@ describe("validation", () => {
       paymentTiming: "completion",
       industry: "bad-industry",
       tone: "bad-tone",
-      currency: "not-a-currency"
+      currency: "not-a-currency",
+      scheduleImpact: "x".repeat(1300),
+      exclusions: "y".repeat(1900)
     });
 
     expect(sanitized.laborHours).toBe(7.5);
@@ -88,6 +111,8 @@ describe("validation", () => {
     expect(sanitized.industry).toBe(defaultInput.industry);
     expect(sanitized.tone).toBe(defaultInput.tone);
     expect(sanitized.currency).toBe("USD");
+    expect(sanitized.scheduleImpact).toHaveLength(1200);
+    expect(sanitized.exclusions).toHaveLength(1800);
     expect(formatMoney(10, "not-a-currency")).toBe("$10.00");
   });
 });
@@ -109,5 +134,11 @@ describe("payment state", () => {
     expect(getPaymentState("not a url").configured).toBe(false);
     expect(getPaymentState("javascript:alert(1)").configured).toBe(false);
     expect(getPaymentState("ftp://example.com/pay").configured).toBe(false);
+  });
+
+  it("falls back safely when no template kit link is configured", () => {
+    expect(getTemplateKitState("").configured).toBe(false);
+    expect(getTemplateKitState("").label).toBe("Template kit link not configured yet");
+    expect(getTemplateKitState("https://gumroad.com/l/changeorderkit").configured).toBe(true);
   });
 });

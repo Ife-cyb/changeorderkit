@@ -162,6 +162,32 @@ textarea.field-control {
   color: #66756d;
 }
 
+.segment {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid #cbd8d3;
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 0.6rem 0.85rem;
+  color: #314238;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.segment:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.segment-active {
+  border-color: var(--accent);
+  background: #e8f5ef;
+  color: var(--accent-strong);
+}
+
 .metric-box {
   min-height: 86px;
   border-left: 3px solid var(--accent);
@@ -180,6 +206,149 @@ textarea.field-control {
   white-space: pre-wrap;
 }
 
+.print-document {
+  margin-top: 1.25rem;
+  border: 1px solid #cbd8d3;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: clamp(1rem, 2.5vw, 2rem);
+  color: #111827;
+}
+
+.print-document-header {
+  display: grid;
+  gap: 1rem;
+  border-bottom: 3px solid var(--accent);
+  padding-bottom: 1rem;
+}
+
+.print-document h2 {
+  margin-top: 0.25rem;
+  font-size: clamp(1.6rem, 3vw, 2.35rem);
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.print-kicker {
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.print-business {
+  display: grid;
+  gap: 0.2rem;
+  color: #475569;
+  font-size: 0.92rem;
+}
+
+.print-business strong {
+  color: #0f172a;
+  font-size: 1.05rem;
+}
+
+.print-meta-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.print-meta-grid > div {
+  border: 1px solid #dce6e1;
+  background: #f6faf8;
+  padding: 0.8rem;
+}
+
+.print-meta-grid span,
+.signature-grid span {
+  display: block;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.print-meta-grid strong {
+  display: block;
+  margin-top: 0.25rem;
+  color: #0f172a;
+}
+
+.print-document section {
+  margin-top: 1rem;
+}
+
+.print-document h3 {
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.print-document p {
+  margin-top: 0.45rem;
+  color: #334155;
+  line-height: 1.65;
+}
+
+.print-document table {
+  width: 100%;
+  margin-top: 0.75rem;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.print-document th,
+.print-document td {
+  border-bottom: 1px solid #dce6e1;
+  padding: 0.65rem 0;
+  text-align: left;
+}
+
+.print-document td {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.print-document .total-row th,
+.print-document .total-row td {
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.signature-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.35rem !important;
+}
+
+.signature-grid i {
+  display: block;
+  min-height: 48px;
+  border-bottom: 1px solid #94a3b8;
+}
+
+@media (min-width: 720px) {
+  .print-document-header {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.36fr);
+    align-items: start;
+  }
+
+  .print-business {
+    text-align: right;
+  }
+
+  .print-meta-grid,
+  .signature-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media print {
   body {
     background: #ffffff;
@@ -192,9 +361,26 @@ textarea.field-control {
   .print-area {
     display: block !important;
     border: 0 !important;
+    padding: 0 !important;
     box-shadow: none !important;
     max-height: none !important;
     overflow: visible !important;
+  }
+
+  .tool-shell {
+    width: 100%;
+  }
+
+  .utility-panel {
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .print-document {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
   }
 }
 
