@@ -14,6 +14,7 @@ create table if not exists public.profiles (
 create table if not exists public.change_orders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
+  document_type text not null default 'change-order' check (document_type in ('change-order', 'work-order', 'service-agreement')),
   title text not null,
   client_name text not null default '',
   project_name text not null default '',
@@ -29,6 +30,8 @@ create index if not exists change_orders_user_updated_idx
   on public.change_orders (user_id, updated_at desc);
 create index if not exists change_orders_user_status_idx
   on public.change_orders (user_id, status);
+create index if not exists change_orders_user_type_updated_idx
+  on public.change_orders (user_id, document_type, updated_at desc);
 
 alter table public.profiles enable row level security;
 alter table public.change_orders enable row level security;

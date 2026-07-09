@@ -1,4 +1,4 @@
-import type { ChangeOrderStatus } from "@/lib/change-order";
+import type { ChangeOrderStatus, DocumentType } from "@/lib/change-order";
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -42,6 +42,7 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
+          document_type: DocumentType;
           title: string;
           client_name: string;
           project_name: string;
@@ -55,6 +56,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
+          document_type?: DocumentType;
           title: string;
           client_name?: string;
           project_name?: string;
@@ -68,6 +70,7 @@ export type Database = {
         Update: {
           id?: string;
           user_id?: string;
+          document_type?: DocumentType;
           title?: string;
           client_name?: string;
           project_name?: string;

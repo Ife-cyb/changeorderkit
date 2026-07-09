@@ -47,21 +47,21 @@ export type ChangeOrderActionResult =
 function authError(): ChangeOrderActionResult {
   return {
     ok: false,
-    error: "Sign in to save change orders."
+    error: "Sign in to save documents."
   };
 }
 
 function notFoundError(): ChangeOrderActionResult {
   return {
     ok: false,
-    error: "Change order not found or you do not have access."
+    error: "Document not found or you do not have access."
   };
 }
 
 function repositoryError(error: RepositoryError | null): ChangeOrderActionResult {
   return {
     ok: false,
-    error: error?.message || "Something went wrong while saving the change order."
+    error: error?.message || "Something went wrong while saving the document."
   };
 }
 
@@ -165,7 +165,7 @@ export async function duplicateChangeOrderWithRepository(
     return notFoundError();
   }
 
-  const originalInput = sanitizeChangeOrderInput(original.data.input);
+  const originalInput = sanitizeChangeOrderInput(original.data.input, original.data.document_type);
   const duplicateInput: ChangeOrderInput = {
     ...originalInput,
     documentTitle: `${originalInput.documentTitle || original.data.title} copy`

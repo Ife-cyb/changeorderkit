@@ -22,7 +22,10 @@ import { saveChangeOrderAction } from "@/app/actions/change-orders";
 import {
   type BusinessProfile,
   type ChangeOrderInput,
+  type DocumentType,
   type GeneratedChangeOrder,
+  documentTypeLabel,
+  documentTypeOptions,
   createDefaultInput,
   defaultInput,
   formatDate,
@@ -52,6 +55,7 @@ type Props = {
 };
 
 const storageKey = "changeorderkit:draft:v2";
+const documentStorageKey = "changeorderkit:draft:v3";
 
 const industries: Array<{ value: Industry; label: string }> = [
   { value: "remodeling", label: "Remodeling" },
@@ -81,6 +85,46 @@ const outputModes: Array<{ value: OutputMode; label: string }> = [
   { value: "follow-up", label: "Follow-up" }
 ];
 
+const documentCopy: Record<
+  DocumentType,
+  {
+    hero: string;
+    dek: string;
+    scopeKicker: string;
+    primaryScopeLabel: string;
+    primaryScopeHelp: string;
+    generatedToast: string;
+  }
+> = {
+  "change-order": {
+    hero: "Turn client changes into approved, paid work before you start.",
+    dek:
+      "Price the extra request, write the approval email, and produce a client-ready change order with terms, scope boundaries, and signature language.",
+    scopeKicker: "Scope boundary",
+    primaryScopeLabel: "New client request",
+    primaryScopeHelp: "Paste the client's text or summarize the added work clearly.",
+    generatedToast: "Change order generated."
+  },
+  "work-order": {
+    hero: "Create clear work orders before the job hits the schedule.",
+    dek:
+      "Document the scope, job location, client responsibilities, schedule, pricing, and approval block in one client-ready work order.",
+    scopeKicker: "Work scope",
+    primaryScopeLabel: "Scope of work",
+    primaryScopeHelp: "Describe the work the client is approving for this job.",
+    generatedToast: "Work order generated."
+  },
+  "service-agreement": {
+    hero: "Draft practical service agreements without turning the app into a law office.",
+    dek:
+      "Create an agreement starter with scope, payment terms, change policy, cancellation language, exclusions, and a clear review disclaimer.",
+    scopeKicker: "Agreement scope",
+    primaryScopeLabel: "Service scope",
+    primaryScopeHelp: "Describe the services, deliverables, or job scope covered by this agreement starter.",
+    generatedToast: "Service agreement generated."
+  }
+};
+
 function parseSavedDraft(value: string | null): ChangeOrderInput | null {
   if (!value) {
     return null;
@@ -95,7 +139,9 @@ function parseSavedDraft(value: string | null): ChangeOrderInput | null {
 
 function readSavedDraft(): ChangeOrderInput | null {
   try {
-    return parseSavedDraft(window.localStorage.getItem(storageKey));
+    return parseSavedDraft(
+      window.localStorage.getItem(documentStorageKey) ?? window.localStorage.getItem(storageKey)
+    );
   } catch {
     return null;
   }
@@ -103,7 +149,7 @@ function readSavedDraft(): ChangeOrderInput | null {
 
 function writeSavedDraft(input: ChangeOrderInput) {
   try {
-    window.localStorage.setItem(storageKey, JSON.stringify(input));
+    window.localStorage.setItem(documentStorageKey, JSON.stringify(input));
   } catch {
     // Browsers can block storage in private or restricted modes.
   }
@@ -111,6 +157,7 @@ function writeSavedDraft(input: ChangeOrderInput) {
 
 function clearSavedDraft() {
   try {
+    window.localStorage.removeItem(documentStorageKey);
     window.localStorage.removeItem(storageKey);
   } catch {
     // Nothing to clear if storage is unavailable.
@@ -143,15 +190,20 @@ function outputText(generated: GeneratedChangeOrder, mode: OutputMode) {
     return generated.followUpTemplate;
   }
 
-  return generated.changeOrderDocument;
+  return generated.primaryDocument;
 }
 
-function outputFilename(mode: OutputMode) {
+function documentSlug(documentType: DocumentType) {
+  return documentType;
+}
+
+function outputFilename(mode: OutputMode, documentType: DocumentType) {
+  const slug = documentSlug(documentType);
   const names: Record<OutputMode, string> = {
-    document: "change-order-document.txt",
-    email: "change-order-email.txt",
-    invoice: "change-order-invoice-note.txt",
-    "follow-up": "change-order-follow-up.txt"
+    document: `${slug}-document.txt`,
+    email: `${slug}-email.txt`,
+    invoice: `${slug}-invoice-note.txt`,
+    "follow-up": `${slug}-follow-up.txt`
   };
 
   return names[mode];
@@ -164,11 +216,15 @@ function PrintableDocument({
   input: ChangeOrderInput;
   generated: GeneratedChangeOrder;
 }) {
+  const isChangeOrder = input.documentType === "change-order";
+  const isServiceAgreement = input.documentType === "service-agreement";
+  const label = documentTypeLabel(input.documentType);
+
   return (
-    <div className="print-document" aria-label="Printable change order document">
+    <div className="print-document" aria-label={`Printable ${label.toLowerCase()} document`}>
       <header className="print-document-header">
         <div>
-          <p className="print-kicker">Change order</p>
+          <p className="print-kicker">{label}</p>
           <h2>{generated.documentTitle}</h2>
         </div>
         <div className="print-business">
@@ -187,26 +243,46 @@ function PrintableDocument({
           <span>Project</span>
           <strong>{input.project || "Project"}</strong>
         </div>
+        {!isChangeOrder ? (
+          <div>
+            <span>Job location</span>
+            <strong>{input.jobLocation || "Location not provided"}</strong>
+          </div>
+        ) : null}
         <div>
           <span>Approval deadline</span>
           <strong>{formatDate(input.approvalDeadline)}</strong>
         </div>
       </div>
 
+      {isChangeOrder ? (
+        <section>
+          <h3>Original approved scope</h3>
+          <p>{input.originalScope || "Original scope not provided."}</p>
+        </section>
+      ) : null}
+
       <section>
-        <h3>Original approved scope</h3>
-        <p>{input.originalScope || "Original scope not provided."}</p>
+        <h3>{isChangeOrder ? "Requested added work" : "Scope of work"}</h3>
+        <p>{input.newRequest || "Scope of work not provided."}</p>
       </section>
 
       <section>
-        <h3>Requested added work</h3>
-        <p>{input.newRequest || "Requested change not provided."}</p>
+        <h3>{isChangeOrder ? "Schedule impact" : "Schedule"}</h3>
+        <p>
+          {input.scheduleImpact ||
+            (input.startDate || input.endDate
+              ? `${input.startDate || "Start TBD"} to ${input.endDate || "completion TBD"}`
+              : "Schedule will be confirmed after approval.")}
+        </p>
       </section>
 
-      <section>
-        <h3>Schedule impact</h3>
-        <p>{input.scheduleImpact || "No schedule impact noted."}</p>
-      </section>
+      {!isChangeOrder ? (
+        <section>
+          <h3>Client responsibilities</h3>
+          <p>{input.clientResponsibilities || "Client responsibilities not provided."}</p>
+        </section>
+      ) : null}
 
       <section>
         <h3>Pricing</h3>
@@ -244,6 +320,19 @@ function PrintableDocument({
         </table>
       </section>
 
+      {isServiceAgreement ? (
+        <>
+          <section>
+            <h3>Changes to scope</h3>
+            <p>{input.changePolicy || "Changes must be approved in writing before scheduling."}</p>
+          </section>
+          <section>
+            <h3>Cancellation</h3>
+            <p>{input.cancellationTerms || "Cancellation terms should be reviewed before use."}</p>
+          </section>
+        </>
+      ) : null}
+
       <section>
         <h3>Payment terms</h3>
         <p>{generated.paymentTerms}</p>
@@ -253,6 +342,12 @@ function PrintableDocument({
         <h3>Scope boundary</h3>
         <p>{input.exclusions || "No additional exclusions listed."}</p>
         <p>{generated.approvalText}</p>
+        {isServiceAgreement ? (
+          <p>
+            This service agreement starter is a business template, not legal advice. Have legal
+            terms reviewed for your location and trade.
+          </p>
+        ) : null}
       </section>
 
       <section className="signature-grid">
@@ -303,6 +398,11 @@ export function ChangeOrderGenerator({
   const kitState = getTemplateKitState(templateKitLink);
   const hasErrors = Object.keys(errors).length > 0;
   const selectedOutput = outputText(generated, outputMode);
+  const activeCopy = documentCopy[input.documentType];
+  const documentLabel = documentTypeLabel(input.documentType);
+  const documentLabelLower = documentLabel.toLowerCase();
+  const isChangeOrder = input.documentType === "change-order";
+  const isServiceAgreement = input.documentType === "service-agreement";
 
   useEffect(() => {
     const restoreId = window.setTimeout(() => {
@@ -347,6 +447,39 @@ export function ChangeOrderGenerator({
     setInput((current) => ({ ...current, [field]: value }));
   }
 
+  function setDocumentType(value: DocumentType) {
+    setInput((current) => {
+      const nextDefault = createDefaultInput(businessProfile ?? undefined, value);
+      const defaults = documentTypeOptions.map((option) => createDefaultInput(undefined, option.value));
+      const shouldReplace = (field: keyof ChangeOrderInput) =>
+        typeof current[field] === "string" &&
+        (!String(current[field]).trim() ||
+          defaults.some((defaultValue) => defaultValue[field] === current[field]));
+
+      return {
+        ...current,
+        documentType: value,
+        documentTitle: shouldReplace("documentTitle") ? nextDefault.documentTitle : current.documentTitle,
+        originalScope: shouldReplace("originalScope") ? nextDefault.originalScope : current.originalScope,
+        newRequest: shouldReplace("newRequest") ? nextDefault.newRequest : current.newRequest,
+        scheduleImpact: shouldReplace("scheduleImpact")
+          ? nextDefault.scheduleImpact
+          : current.scheduleImpact,
+        startDate: current.startDate || nextDefault.startDate,
+        endDate: current.endDate || nextDefault.endDate,
+        clientResponsibilities: shouldReplace("clientResponsibilities")
+          ? nextDefault.clientResponsibilities
+          : current.clientResponsibilities,
+        exclusions: shouldReplace("exclusions") ? nextDefault.exclusions : current.exclusions,
+        changePolicy: shouldReplace("changePolicy") ? nextDefault.changePolicy : current.changePolicy,
+        cancellationTerms: shouldReplace("cancellationTerms")
+          ? nextDefault.cancellationTerms
+          : current.cancellationTerms
+      };
+    });
+    setErrors({});
+  }
+
   function setNumberField(field: keyof ChangeOrderInput, value: string) {
     const parsed = Number.parseFloat(value);
     setInput((current) => ({ ...current, [field]: Number.isFinite(parsed) ? parsed : 0 }));
@@ -384,8 +517,9 @@ export function ChangeOrderGenerator({
     }
 
     outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    showToast("Change order generated.");
-    trackEvent("change_order_generated", {
+    showToast(activeCopy.generatedToast);
+    trackEvent("document_generated", {
+      document_type: input.documentType,
       industry: input.industry,
       total: Math.round(generated.breakdown.total)
     });
@@ -414,12 +548,12 @@ export function ChangeOrderGenerator({
         setCurrentOrderId(result.id);
 
         if (window.location.pathname.endsWith("/new")) {
-          router.replace(`/dashboard/change-orders/${result.id}`);
+          router.replace(`/dashboard/documents/${result.id}`);
         }
       }
 
-      showToast("Change order saved.");
-      trackEvent("change_order_saved", { industry: input.industry });
+      showToast(`${documentLabel} saved.`);
+      trackEvent("document_saved", { document_type: input.documentType, industry: input.industry });
     });
   }
 
@@ -432,7 +566,11 @@ export function ChangeOrderGenerator({
     try {
       await navigator.clipboard.writeText(selectedOutput);
       showToast("Copied to clipboard.");
-      trackEvent("change_order_copied", { industry: input.industry, output: outputMode });
+      trackEvent("document_copied", {
+        document_type: input.documentType,
+        industry: input.industry,
+        output: outputMode
+      });
     } catch {
       showToast("Copy failed. Select the document text and copy manually.");
     }
@@ -448,13 +586,17 @@ export function ChangeOrderGenerator({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = outputFilename(outputMode);
+    link.download = outputFilename(outputMode, input.documentType);
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
     showToast("Downloaded text file.");
-    trackEvent("change_order_downloaded", { industry: input.industry, output: outputMode });
+    trackEvent("document_downloaded", {
+      document_type: input.documentType,
+      industry: input.industry,
+      output: outputMode
+    });
   }
 
   function printDocument() {
@@ -464,13 +606,13 @@ export function ChangeOrderGenerator({
     }
 
     setOutputMode("document");
-    trackEvent("change_order_printed", { industry: input.industry });
+    trackEvent("document_printed", { document_type: input.documentType, industry: input.industry });
     window.setTimeout(() => window.print(), 0);
   }
 
   function resetDraft() {
     clearSavedDraft();
-    setInput(createDefaultInput(businessProfile ?? undefined));
+    setInput(createDefaultInput(businessProfile ?? undefined, input.documentType));
     setErrors({});
     showToast("Example draft restored.");
     trackEvent("draft_reset");
@@ -497,20 +639,33 @@ export function ChangeOrderGenerator({
   }
 
   return (
-    <section className="tool-shell py-7 sm:py-10" aria-label="Change order generator">
+    <section className="tool-shell py-7 sm:py-10" aria-label="Document generator">
       <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.45fr)] lg:items-end">
         <div>
           <p className="panel-kicker mb-3">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Approval packet
+            Document generator
           </p>
           <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight text-[var(--ink)] sm:text-5xl lg:text-7xl">
-            Turn client changes into approved, paid work before you start.
+            {activeCopy.hero}
           </h1>
           <p className="mt-5 max-w-[65ch] text-lg leading-8 text-[var(--ink-soft)]">
-            Price the extra request, write the approval email, and produce a client-ready change
-            order with terms, scope boundaries, and signature language.
+            {activeCopy.dek}
           </p>
+          <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Document type">
+            {documentTypeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={input.documentType === option.value ? "segment segment-active" : "segment"}
+                onClick={() => setDocumentType(option.value)}
+                role="tab"
+                aria-selected={input.documentType === option.value}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
         <aside className="ledger-rail no-print overflow-hidden" aria-label="Current draft status">
           <div className="p-4">
@@ -522,6 +677,10 @@ export function ChangeOrderGenerator({
                 ? "Saved drafts and business defaults are active."
                 : "Autosaves locally. Sign in when this becomes a job record."}
             </p>
+          </div>
+          <div className="ledger-row">
+            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Document type</span>
+            <strong className="text-right text-sm">{documentLabel}</strong>
           </div>
           <div className="ledger-row">
             <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Current total</span>
@@ -561,11 +720,11 @@ export function ChangeOrderGenerator({
             <div>
               <p className="panel-kicker">Scope intake</p>
               <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--ink)]">
-                Build the approval record
+                Build the {documentLabelLower}
               </h2>
             </div>
             <span className="hidden rounded-md border border-[var(--border)] bg-[var(--paper-soft)] px-3 py-2 font-mono text-sm font-bold text-[var(--ink-soft)] sm:inline-flex">
-              Draft v2
+              Draft v3
             </span>
           </div>
           {hasErrors ? (
@@ -653,6 +812,40 @@ export function ChangeOrderGenerator({
               />
             </label>
 
+            {!isChangeOrder ? (
+              <>
+                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+                  Job location
+                  <input
+                    className="field-control"
+                    value={input.jobLocation}
+                    autoComplete="street-address"
+                    onChange={(event) => setTextField("jobLocation", event.target.value)}
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+                  Start date
+                  <input
+                    className="field-control"
+                    type="date"
+                    value={input.startDate}
+                    onChange={(event) => setTextField("startDate", event.target.value)}
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+                  Completion target
+                  <input
+                    className="field-control"
+                    type="date"
+                    value={input.endDate}
+                    onChange={(event) => setTextField("endDate", event.target.value)}
+                  />
+                </label>
+              </>
+            ) : null}
+
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Industry
               <select
@@ -670,26 +863,28 @@ export function ChangeOrderGenerator({
           </div>
 
           <div className="mt-5 border-t border-[var(--border)] pt-5">
-            <p className="panel-kicker mb-4">Scope boundary</p>
+            <p className="panel-kicker mb-4">{activeCopy.scopeKicker}</p>
             <div className="grid gap-4">
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Original agreed scope
-              <textarea
-                className="field-control"
-                value={input.originalScope}
-                aria-invalid={Boolean(errors.originalScope)}
-                aria-describedby="originalScope-help originalScope-error"
-                ref={(node) => registerFirstError("originalScope", node)}
-                onChange={(event) => setTextField("originalScope", event.target.value)}
-              />
-              <span id="originalScope-help" className="text-sm font-medium text-[var(--muted)]">
-                What was already included before the new request?
-              </span>
-              <InputError id="originalScope-error" message={errors.originalScope} />
-            </label>
+            {isChangeOrder ? (
+              <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+                Original agreed scope
+                <textarea
+                  className="field-control"
+                  value={input.originalScope}
+                  aria-invalid={Boolean(errors.originalScope)}
+                  aria-describedby="originalScope-help originalScope-error"
+                  ref={(node) => registerFirstError("originalScope", node)}
+                  onChange={(event) => setTextField("originalScope", event.target.value)}
+                />
+                <span id="originalScope-help" className="text-sm font-medium text-[var(--muted)]">
+                  What was already included before the new request?
+                </span>
+                <InputError id="originalScope-error" message={errors.originalScope} />
+              </label>
+            ) : null}
 
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              New client request
+              {activeCopy.primaryScopeLabel}
               <textarea
                 className="field-control"
                 value={input.newRequest}
@@ -699,13 +894,13 @@ export function ChangeOrderGenerator({
                 onChange={(event) => setTextField("newRequest", event.target.value)}
               />
               <span id="newRequest-help" className="text-sm font-medium text-[var(--muted)]">
-                Paste the client&apos;s text or summarize the added work clearly.
+                {activeCopy.primaryScopeHelp}
               </span>
               <InputError id="newRequest-error" message={errors.newRequest} />
             </label>
 
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Schedule impact
+              {isChangeOrder ? "Schedule impact" : "Schedule notes"}
               <textarea
                 className="field-control"
                 value={input.scheduleImpact}
@@ -721,6 +916,36 @@ export function ChangeOrderGenerator({
                 onChange={(event) => setTextField("exclusions", event.target.value)}
               />
             </label>
+            {!isChangeOrder ? (
+              <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+                Client responsibilities
+                <textarea
+                  className="field-control"
+                  value={input.clientResponsibilities}
+                  onChange={(event) => setTextField("clientResponsibilities", event.target.value)}
+                />
+              </label>
+            ) : null}
+            {isServiceAgreement ? (
+              <>
+                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+                  Change policy
+                  <textarea
+                    className="field-control"
+                    value={input.changePolicy}
+                    onChange={(event) => setTextField("changePolicy", event.target.value)}
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+                  Cancellation language
+                  <textarea
+                    className="field-control"
+                    value={input.cancellationTerms}
+                    onChange={(event) => setTextField("cancellationTerms", event.target.value)}
+                  />
+                </label>
+              </>
+            ) : null}
             </div>
           </div>
 
@@ -905,8 +1130,9 @@ export function ChangeOrderGenerator({
               </h2>
             </div>
             <div className="rounded-lg border border-[color:oklch(0.75_0.08_75)] bg-[var(--warning-soft)] p-3 text-sm font-semibold leading-6 text-[color:oklch(0.34_0.08_62)]">
-              Business template only. Review your contract and local laws before using late
-              fees, interest, liens, or legal escalation.
+              {isServiceAgreement
+                ? "Service agreement starter only. Have legal terms reviewed for your location, trade, and licensing rules."
+                : "Business template only. Review your contract and local laws before using late fees, interest, liens, or legal escalation."}
             </div>
           </div>
 
@@ -967,7 +1193,7 @@ export function ChangeOrderGenerator({
             <div
               className="document-preview mt-5"
               tabIndex={0}
-              aria-label="Generated change order output"
+              aria-label={`Generated ${documentLabelLower} output`}
             >
               {selectedOutput}
             </div>

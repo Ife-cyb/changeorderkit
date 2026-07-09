@@ -5,6 +5,7 @@ import {
   Archive,
   Copy,
   ExternalLink,
+  Filter,
   FilePlus2,
   LayoutDashboard,
   Pencil,
@@ -19,7 +20,14 @@ import {
 } from "@/app/actions/change-orders";
 import { SetupNotice } from "@/components/setup-notice";
 import { changeOrderFromRow, profileFromRow } from "@/lib/change-order-records";
-import { formatMoney, type SavedChangeOrder } from "@/lib/change-order";
+import {
+  documentTypeLabel,
+  documentTypeOptions,
+  formatMoney,
+  sanitizeDocumentType,
+  type DocumentType,
+  type SavedProjectDocument
+} from "@/lib/change-order";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +44,11 @@ function formatUpdatedAt(value: string) {
   }).format(new Date(value));
 }
 
-function StatusPill({ status }: { status: SavedChangeOrder["status"] }) {
+type SearchParams = Promise<{
+  type?: string;
+}>;
+
+function StatusPill({ status }: { status: SavedProjectDocument["status"] }) {
   const label = status === "archived" ? "Archived" : status === "ready" ? "Ready" : "Draft";
 
   return (
@@ -46,11 +58,21 @@ function StatusPill({ status }: { status: SavedChangeOrder["status"] }) {
   );
 }
 
-function EmptyState({ archived = false }: { archived?: boolean }) {
+function TypePill({ documentType }: { documentType: DocumentType }) {
+  return (
+    <span className="inline-flex min-h-7 items-center rounded-full border border-[var(--border)] bg-[var(--paper-soft)] px-2.5 text-xs font-black uppercase tracking-[0.1em] text-[var(--ink-soft)]">
+      {documentTypeLabel(documentType)}
+    </span>
+  );
+}
+
+function EmptyState({ archived = false, activeType }: { archived?: boolean; activeType?: DocumentType }) {
+  const typeLabel = activeType ? documentTypeLabel(activeType).toLowerCase() : "documents";
+
   return (
     <div className="workspace-panel p-5">
       <h2 className="text-xl font-black tracking-tight text-[var(--ink)]">
-        {archived ? "No archived change orders" : "No saved change orders yet"}
+        {archived ? `No archived ${typeLabel}` : `No saved ${typeLabel} yet`}
       </h2>
       <p className="mt-2 max-w-[65ch] leading-7 text-[var(--ink-soft)]">
         {archived
@@ -58,16 +80,19 @@ function EmptyState({ archived = false }: { archived?: boolean }) {
           : "Create a saved draft from the dashboard or save the visitor generator after signing in."}
       </p>
       {!archived ? (
-        <Link className="btn btn-primary mt-4 w-full sm:w-auto" href="/dashboard/change-orders/new">
+        <Link
+          className="btn btn-primary mt-4 w-full sm:w-auto"
+          href={`/dashboard/documents/new${activeType ? `?type=${activeType}` : ""}`}
+        >
           <FilePlus2 className="h-5 w-5" aria-hidden="true" />
-          New change order
+          New document
         </Link>
       ) : null}
     </div>
   );
 }
 
-function ChangeOrderList({ orders }: { orders: SavedChangeOrder[] }) {
+function DocumentList({ orders }: { orders: SavedProjectDocument[] }) {
   return (
     <div className="workspace-panel px-4 sm:px-5">
       {orders.map((order) => (
@@ -76,6 +101,7 @@ function ChangeOrderList({ orders }: { orders: SavedChangeOrder[] }) {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill status={order.status} />
+                <TypePill documentType={order.documentType} />
                 <span className="text-sm font-semibold text-[var(--muted)]">
                   Updated {formatUpdatedAt(order.updatedAt)}
                 </span>
@@ -91,7 +117,7 @@ function ChangeOrderList({ orders }: { orders: SavedChangeOrder[] }) {
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2 lg:min-w-96 lg:grid-cols-3">
-              <Link className="btn btn-primary" href={`/dashboard/change-orders/${order.id}`}>
+              <Link className="btn btn-primary" href={`/dashboard/documents/${order.id}`}>
                 <Pencil className="h-5 w-5" aria-hidden="true" />
                 Edit
               </Link>
@@ -134,7 +160,13 @@ function ChangeOrderList({ orders }: { orders: SavedChangeOrder[] }) {
   );
 }
 
-export default async function DashboardPage() {
+function typeFilterHref(type?: DocumentType) {
+  return type ? `/dashboard?type=${type}` : "/dashboard";
+}
+
+export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
+  const { type } = await searchParams;
+  const activeType = type ? sanitizeDocumentType(type) : null;
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
@@ -157,8 +189,11 @@ export default async function DashboardPage() {
 
   const profile = profileFromRow(profileRow);
   const orders = (orderRows ?? []).map(changeOrderFromRow);
-  const activeOrders = orders.filter((order) => order.status !== "archived");
-  const archivedOrders = orders.filter((order) => order.status === "archived");
+  const filteredOrders = activeType
+    ? orders.filter((order) => order.documentType === activeType)
+    : orders;
+  const activeOrders = filteredOrders.filter((order) => order.status !== "archived");
+  const archivedOrders = filteredOrders.filter((order) => order.status === "archived");
 
   return (
     <section className="tool-shell py-8 sm:py-10">
@@ -169,12 +204,12 @@ export default async function DashboardPage() {
             Saved workspace
           </p>
           <h1 className="mt-2 text-4xl font-black tracking-tight text-[var(--ink)] sm:text-5xl">
-            Change orders
+            Documents
           </h1>
           <p className="mt-3 max-w-[65ch] leading-7 text-[var(--ink-soft)]">
             {profile?.businessName
               ? `${profile.businessName} defaults are ready for new drafts.`
-              : "Save drafts, duplicate repeat jobs, and keep approved extra work organized."}
+              : "Save drafts, duplicate repeat jobs, and keep approvals, work orders, and service agreements organized."}
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -182,11 +217,40 @@ export default async function DashboardPage() {
             <ExternalLink className="h-5 w-5" aria-hidden="true" />
             Settings
           </Link>
-          <Link className="btn btn-primary" href="/dashboard/change-orders/new">
+          <Link className="btn btn-primary" href="/dashboard/documents/new">
             <FilePlus2 className="h-5 w-5" aria-hidden="true" />
-            New change order
+            New document
           </Link>
         </div>
+      </div>
+
+      <div className="mb-5 flex flex-wrap gap-2" aria-label="Document filters">
+        <Link className={!activeType ? "segment segment-active" : "segment"} href={typeFilterHref()}>
+          <Filter className="h-4 w-4" aria-hidden="true" />
+          All documents
+        </Link>
+        {documentTypeOptions.map((option) => (
+          <Link
+            key={option.value}
+            className={activeType === option.value ? "segment segment-active" : "segment"}
+            href={typeFilterHref(option.value)}
+          >
+            {option.label}
+          </Link>
+        ))}
+      </div>
+
+      <div className="mb-6 grid gap-3 md:grid-cols-3">
+        {documentTypeOptions.map((option) => (
+          <Link
+            key={option.value}
+            className="btn btn-secondary justify-start"
+            href={`/dashboard/documents/new?type=${option.value}`}
+          >
+            <FilePlus2 className="h-5 w-5" aria-hidden="true" />
+            New {option.label.toLowerCase()}
+          </Link>
+        ))}
       </div>
 
       {orderError ? (
@@ -196,14 +260,18 @@ export default async function DashboardPage() {
       ) : null}
 
       <div className="grid gap-8">
-        {activeOrders.length > 0 ? <ChangeOrderList orders={activeOrders} /> : <EmptyState />}
+        {activeOrders.length > 0 ? (
+          <DocumentList orders={activeOrders} />
+        ) : (
+          <EmptyState activeType={activeType ?? undefined} />
+        )}
 
         <section>
           <h2 className="mb-3 text-xl font-black tracking-tight text-[var(--ink)]">Archived</h2>
           {archivedOrders.length > 0 ? (
-            <ChangeOrderList orders={archivedOrders} />
+            <DocumentList orders={archivedOrders} />
           ) : (
-            <EmptyState archived />
+            <EmptyState archived activeType={activeType ?? undefined} />
           )}
         </section>
       </div>

@@ -38,7 +38,7 @@ async function actionContext(): Promise<
   if (error || !userId) {
     return {
       ok: false,
-      error: "Sign in to save change orders."
+      error: "Sign in to save documents."
     };
   }
 
@@ -55,6 +55,7 @@ function refreshSavedWork(id?: string | null) {
 
   if (id) {
     revalidatePath(`/dashboard/change-orders/${id}`);
+    revalidatePath(`/dashboard/documents/${id}`);
   }
 }
 

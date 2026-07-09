@@ -27,11 +27,11 @@ export const metadata: Metadata = {
     template: "%s | ChangeOrderKit"
   },
   description:
-    "Generate change orders, approval emails, and payment terms before client scope changes become unpaid work.",
+    "Generate change orders, work orders, service agreement starters, approval emails, and payment terms before job paperwork slows you down.",
   openGraph: {
     title: "ChangeOrderKit",
     description:
-      "Price extra work, set approval terms, and generate the client message before you start.",
+      "Price job paperwork, set approval terms, and generate the client message before work starts.",
     url: siteUrl,
     siteName: "ChangeOrderKit",
     type: "website"
@@ -71,7 +71,7 @@ export default async function RootLayout({
                   ChangeOrderKit
                 </span>
                 <span className="block text-sm font-medium text-[var(--muted)]">
-                  Extra work priced before it starts.
+                  Job paperwork before work starts.
                 </span>
               </span>
             </Link>

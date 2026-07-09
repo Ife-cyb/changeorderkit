@@ -80,7 +80,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: Searc
               Phase 2 workspace
             </p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--paper)]">
-              One business profile, reusable on every change order.
+              One business profile, reusable on every document.
             </h2>
             <p className="mt-3 text-sm leading-6 text-[color:oklch(0.86_0.012_115)]">
               Save your default rate, margin, deposit, tone, and contact details once.

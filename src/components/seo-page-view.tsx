@@ -30,9 +30,9 @@ export function SeoPageView({ page }: { page: SeoPage }) {
             </h2>
           </div>
           {[
-            "Enter original scope and the new request.",
-            "Add labor, materials, margin, and deposit.",
-            "Copy the approval email before work begins."
+            "Choose the document type that matches the job.",
+            "Add scope, pricing, schedule, and payment terms.",
+            "Copy, save, print, or send the approval packet."
           ].map((item) => (
             <div key={item} className="ledger-row">
               <span className="flex gap-2 text-sm text-[color:oklch(0.86_0.012_115)]">

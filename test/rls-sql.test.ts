@@ -1,10 +1,12 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const migration = readFileSync(
-  new URL("../supabase/migrations/20260708000000_phase_2_accounts.sql", import.meta.url),
-  "utf8"
-).toLowerCase();
+const migrationsDir = new URL("../supabase/migrations/", import.meta.url);
+const migration = readdirSync(migrationsDir)
+  .filter((file) => file.endsWith(".sql"))
+  .map((file) => readFileSync(new URL(file, migrationsDir), "utf8"))
+  .join("\n")
+  .toLowerCase();
 
 describe("supabase rls migration", () => {
   it("enables rls and scopes policies to authenticated owners", () => {
@@ -19,5 +21,14 @@ describe("supabase rls migration", () => {
     expect(migration).not.toContain("auth.role()");
     expect(migration).not.toContain("service_role");
     expect(migration).not.toContain("grant all");
+  });
+
+  it("adds document type support without weakening ownership", () => {
+    expect(migration).toContain("document_type");
+    expect(migration).toContain("'change-order'");
+    expect(migration).toContain("'work-order'");
+    expect(migration).toContain("'service-agreement'");
+    expect(migration).toContain("change_orders_user_type_updated_idx");
+    expect(migration).toContain("using ((select auth.uid()) = user_id)");
   });
 });

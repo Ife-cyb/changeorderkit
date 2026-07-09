@@ -17,7 +17,7 @@ export default function PrivacyPage() {
           your browser local storage so your work is not lost when you refresh.
         </p>
         <p>
-          If you create an account, saved business settings and change orders are stored in the
+          If you create an account, saved business settings and job documents are stored in the
           ChangeOrderKit Supabase database so you can reopen them later.
         </p>
         <p>

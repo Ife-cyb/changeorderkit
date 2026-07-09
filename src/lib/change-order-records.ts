@@ -2,6 +2,7 @@ import {
   type BusinessProfile,
   type ChangeOrderInput,
   type ChangeOrderStatus,
+  type DocumentType,
   type PaymentTiming,
   type SavedChangeOrder,
   type Tone,
@@ -27,6 +28,12 @@ type DefaultSettings = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function documentTypeFromRow(value: unknown): DocumentType {
+  return value === "work-order" || value === "service-agreement" || value === "change-order"
+    ? value
+    : "change-order";
 }
 
 function numberSetting(value: unknown, fallback: number, min: number, max: number) {
@@ -132,14 +139,19 @@ export function profileFromFormData(
 }
 
 export function changeOrderFromRow(row: ChangeOrderRow): SavedChangeOrder {
+  const rowDocumentType = row.document_type ? documentTypeFromRow(row.document_type) : undefined;
+  const input = sanitizeChangeOrderInput(row.input, rowDocumentType);
+  const documentType = rowDocumentType ?? input.documentType;
+
   return {
     id: row.id,
     userId: row.user_id,
+    documentType,
     title: row.title,
     clientName: row.client_name,
     projectName: row.project_name,
     status: row.status,
-    input: sanitizeChangeOrderInput(row.input),
+    input,
     total: Number(row.total) || 0,
     currency: row.currency,
     createdAt: row.created_at,
@@ -158,7 +170,8 @@ export function buildChangeOrderInsert(
 
   return {
     user_id: userId,
-    title: clean.documentTitle.trim() || clean.project.trim() || "Untitled change order",
+    document_type: clean.documentType,
+    title: clean.documentTitle.trim() || clean.project.trim() || "Untitled document",
     client_name: clean.client.trim(),
     project_name: clean.project.trim(),
     status,
@@ -173,6 +186,7 @@ export function buildChangeOrderUpdate(input: ChangeOrderInput): ChangeOrderUpda
   const insert = buildChangeOrderInsert("placeholder", input);
 
   return {
+    document_type: insert.document_type,
     title: insert.title,
     client_name: insert.client_name,
     project_name: insert.project_name,

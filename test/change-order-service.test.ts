@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultInput } from "../src/lib/change-order";
+import { createDefaultInput, defaultInput } from "../src/lib/change-order";
 import {
   type ChangeOrderRepository,
   duplicateChangeOrderWithRepository,
@@ -19,6 +19,7 @@ function rowFromInsert(id: string, payload: ChangeOrderInsert): ChangeOrderRow {
   return {
     id,
     user_id: payload.user_id,
+    document_type: payload.document_type ?? "change-order",
     title: payload.title,
     client_name: payload.client_name ?? "",
     project_name: payload.project_name ?? "",
@@ -105,6 +106,21 @@ describe("change order save actions with mocked repositories", () => {
 
     expect(updated.ok).toBe(true);
     expect(updated.ok ? updated.changeOrder?.title : "").toBe("Updated title");
+  });
+
+  it("preserves document type when saving and duplicating documents", async () => {
+    const repository = new FakeRepository();
+    const workOrder = createDefaultInput(undefined, "work-order");
+    const saved = await saveChangeOrderWithRepository(repository, "user_1", workOrder);
+    const id = saved.ok ? saved.id ?? "" : "";
+
+    expect(saved.ok ? saved.changeOrder?.documentType : "").toBe("work-order");
+    expect(repository.rows.get(id)?.document_type).toBe("work-order");
+
+    const duplicated = await duplicateChangeOrderWithRepository(repository, "user_1", id);
+
+    expect(duplicated.ok ? duplicated.changeOrder?.documentType : "").toBe("work-order");
+    expect(duplicated.ok ? duplicated.changeOrder?.input.documentType : "").toBe("work-order");
   });
 
   it("blocks wrong-owner updates", async () => {

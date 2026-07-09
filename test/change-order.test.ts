@@ -3,6 +3,7 @@ import {
   calculatePrice,
   createDefaultInput,
   defaultInput,
+  documentTypeLabel,
   formatMoney,
   generateChangeOrder,
   getPaymentState,
@@ -67,6 +68,30 @@ describe("generated copy", () => {
     expect(generated.invoiceNote).toContain("Approved change order");
     expect(generated.followUpTemplate).toContain("follow up");
   });
+
+  it("generates deterministic outputs for work orders", () => {
+    const input = createDefaultInput(undefined, "work-order");
+    const generated = generateChangeOrder(input);
+
+    expect(documentTypeLabel(input.documentType)).toBe("Work order");
+    expect(generated.fullDocument).toContain("WORK ORDER DOCUMENT");
+    expect(generated.primaryDocument).toContain("SCOPE OF WORK");
+    expect(generated.primaryDocument).toContain("CLIENT RESPONSIBILITIES");
+    expect(generated.clientEmail).toContain("work order");
+    expect(generated.invoiceNote).toContain("Approved work order");
+  });
+
+  it("generates deterministic outputs for service agreement starters", () => {
+    const input = createDefaultInput(undefined, "service-agreement");
+    const generated = generateChangeOrder(input);
+
+    expect(documentTypeLabel(input.documentType)).toBe("Service agreement");
+    expect(generated.fullDocument).toContain("SERVICE AGREEMENT DOCUMENT");
+    expect(generated.primaryDocument).toContain("SERVICE AGREEMENT STARTER");
+    expect(generated.primaryDocument).toContain("not legal advice");
+    expect(generated.primaryDocument).toContain("CHANGES TO SCOPE");
+    expect(generated.primaryDocument).toContain("CANCELLATION");
+  });
 });
 
 describe("validation", () => {
@@ -85,6 +110,37 @@ describe("validation", () => {
     expect(errors.client).toBeTruthy();
     expect(errors.originalScope).toBeTruthy();
     expect(errors.newRequest).toBeTruthy();
+  });
+
+  it("treats old saved drafts without a document type as change orders", () => {
+    const sanitized = sanitizeChangeOrderInput({
+      documentTitle: "Legacy saved row",
+      provider: "Legacy Co",
+      client: "Client",
+      originalScope: "Original scope",
+      newRequest: "Added request"
+    });
+
+    expect(sanitized.documentType).toBe("change-order");
+    expect(generateChangeOrder(sanitized).primaryDocument).toContain("ORIGINAL APPROVED SCOPE");
+  });
+
+  it("uses document-specific validation for work orders and agreements", () => {
+    const workOrderErrors = validateChangeOrder({
+      ...createDefaultInput(undefined, "work-order"),
+      originalScope: "",
+      newRequest: ""
+    });
+    const agreementErrors = validateChangeOrder({
+      ...createDefaultInput(undefined, "service-agreement"),
+      originalScope: "",
+      newRequest: ""
+    });
+
+    expect(workOrderErrors.originalScope).toBeUndefined();
+    expect(workOrderErrors.newRequest).toBeTruthy();
+    expect(agreementErrors.originalScope).toBeUndefined();
+    expect(agreementErrors.newRequest).toBeTruthy();
   });
 
   it("sanitizes corrupted browser drafts before validation or formatting", () => {

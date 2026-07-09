@@ -33,7 +33,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
                 Sign in
               </h1>
               <p className="mt-1 text-sm text-[var(--muted)]">
-                Save and reopen your change orders.
+                Save and reopen your job documents.
               </p>
             </div>
           </div>

@@ -66,7 +66,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
             Settings
           </h1>
           <p className="mt-3 max-w-[65ch] leading-7 text-[var(--ink-soft)]">
-            These defaults prefill new saved change orders and keep document headers consistent.
+            These defaults prefill saved documents and keep document headers consistent.
           </p>
         </div>
 
