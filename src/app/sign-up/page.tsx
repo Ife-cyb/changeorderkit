@@ -56,7 +56,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: Searc
                 name="password"
                 type="password"
                 autoComplete="new-password"
-                minLength={8}
+                minLength={12}
                 required
               />
             </label>
@@ -83,12 +83,12 @@ export default async function SignUpPage({ searchParams }: { searchParams: Searc
               One business profile, reusable on every document.
             </h2>
             <p className="mt-3 text-sm leading-6 text-[color:oklch(0.86_0.012_115)]">
-              Save your default rate, margin, deposit, tone, and contact details once.
+              Save your default rate, markup, deposit, tone, and contact details once.
             </p>
           </div>
           <div className="ledger-row">
             <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Password</span>
-            <strong className="font-mono text-sm">8+ chars</strong>
+            <strong className="font-mono text-sm">12+ chars</strong>
           </div>
           <div className="ledger-row">
             <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Storage</span>

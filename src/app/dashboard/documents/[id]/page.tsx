@@ -49,7 +49,7 @@ export default async function SavedDocumentPage({
         isSignedIn
         businessProfile={profile}
         useLocalDraft={false}
-        paymentLink={process.env.NEXT_PUBLIC_PAYMENT_LINK}
+        pilotLink={process.env.NEXT_PUBLIC_PILOT_LINK || process.env.NEXT_PUBLIC_PAYMENT_LINK}
         templateKitLink={process.env.NEXT_PUBLIC_TEMPLATE_KIT_LINK}
       />
     );
@@ -75,7 +75,7 @@ export default async function SavedDocumentPage({
       isSignedIn
       businessProfile={profile}
       useLocalDraft={false}
-      paymentLink={process.env.NEXT_PUBLIC_PAYMENT_LINK}
+      pilotLink={process.env.NEXT_PUBLIC_PILOT_LINK || process.env.NEXT_PUBLIC_PAYMENT_LINK}
       templateKitLink={process.env.NEXT_PUBLIC_TEMPLATE_KIT_LINK}
     />
   );

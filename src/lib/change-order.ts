@@ -432,9 +432,18 @@ export function calculatePrice(input: ProjectDocumentInput): PriceBreakdown {
 }
 
 export function formatMoney(value: number, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
+  const normalizedCurrency = normalizeCurrency(currency);
+  const localeByCurrency: Record<string, string> = {
+    AUD: "en-AU",
+    CAD: "en-CA",
+    GBP: "en-GB",
+    NGN: "en-NG",
+    USD: "en-US"
+  };
+
+  return new Intl.NumberFormat(localeByCurrency[normalizedCurrency] || "en-US", {
     style: "currency",
-    currency: normalizeCurrency(currency),
+    currency: normalizedCurrency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(Number.isFinite(value) ? value : 0);
@@ -603,7 +612,7 @@ export function validateChangeOrder(input: ProjectDocumentInput): ValidationErro
   }
 
   if (input.marginPercent < 0 || input.marginPercent > 80) {
-    errors.marginPercent = "Use a margin from 0% to 80%.";
+    errors.marginPercent = "Use a markup from 0% to 80%.";
   }
 
   if (input.rushPercent < 0 || input.rushPercent > 100) {
@@ -649,8 +658,12 @@ function getExternalLinkState(link: string | null | undefined, configuredLabel: 
   }
 }
 
-export function getPaymentState(paymentLink?: string | null) {
-  return getExternalLinkState(paymentLink, "Unlock polished export", "Payment link not configured yet");
+export function getPilotState(pilotLink?: string | null) {
+  return getExternalLinkState(
+    pilotLink,
+    "Join paid approval-link pilot",
+    "Paid pilot link not configured yet"
+  );
 }
 
 export function getTemplateKitState(templateKitLink?: string | null) {
@@ -675,7 +688,7 @@ function priceLines(input: ProjectDocumentInput, breakdown: PriceBreakdown) {
   return [
     `Labor: ${formatMoney(breakdown.labor, input.currency)}`,
     `Materials and direct costs: ${formatMoney(breakdown.materials, input.currency)}`,
-    `Margin/overhead: ${formatMoney(breakdown.marginAmount, input.currency)}`,
+    `Markup/overhead: ${formatMoney(breakdown.marginAmount, input.currency)}`,
     `Rush/disruption: ${formatMoney(breakdown.rushAmount, input.currency)}`,
     `Total: ${formatMoney(breakdown.total, input.currency)}`,
     `Deposit: ${formatMoney(breakdown.depositAmount, input.currency)}`,
@@ -695,7 +708,7 @@ function summaryLines(input: ProjectDocumentInput, breakdown: PriceBreakdown) {
     "Pricing:",
     `Labor: ${input.laborHours || 0} hours at ${formatMoney(input.hourlyRate || 0, input.currency)}/hour = ${formatMoney(breakdown.labor, input.currency)}`,
     `Materials and direct costs: ${formatMoney(breakdown.materials, input.currency)}`,
-    `Margin/overhead allowance: ${clampNumber(input.marginPercent, 0, 80)}% = ${formatMoney(breakdown.marginAmount, input.currency)}`,
+    `Markup/overhead allowance: ${clampNumber(input.marginPercent, 0, 80)}% = ${formatMoney(breakdown.marginAmount, input.currency)}`,
     `Rush/disruption fee: ${clampNumber(input.rushPercent, 0, 100)}% = ${formatMoney(breakdown.rushAmount, input.currency)}`,
     `Total: ${formatMoney(breakdown.total, input.currency)}`,
     `Deposit required: ${clampNumber(input.depositPercent, 0, 100)}% = ${formatMoney(breakdown.depositAmount, input.currency)}`

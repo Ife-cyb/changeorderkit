@@ -21,9 +21,15 @@ export default function PrivacyPage() {
           ChangeOrderKit Supabase database so you can reopen them later.
         </p>
         <p>
-          If analytics are enabled on the hosting platform, they may collect standard aggregate
-          usage events such as page views and button clicks. Do not enter sensitive personal,
-          financial, medical, or legal information into the tool.
+          If analytics are enabled on the hosting platform, they collect aggregate usage events
+          such as generator views, selected industry and currency, broad price ranges, and button
+          clicks. Analytics events do not include your client name, project description, scope,
+          email address, phone number, or exact document total.
+        </p>
+        <p>
+          Do not enter sensitive financial, medical, legal, identification, or account-security
+          information into document fields. You can clear an unsigned browser draft by using the
+          generator&apos;s reset control or clearing this site&apos;s storage in your browser.
         </p>
         </div>
       </div>

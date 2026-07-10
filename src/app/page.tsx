@@ -30,7 +30,7 @@ export default async function Home() {
       initialInput={createDefaultInput(profile ?? undefined)}
       isSignedIn={isSignedIn}
       businessProfile={profile}
-      paymentLink={process.env.NEXT_PUBLIC_PAYMENT_LINK}
+      pilotLink={process.env.NEXT_PUBLIC_PILOT_LINK || process.env.NEXT_PUBLIC_PAYMENT_LINK}
       templateKitLink={process.env.NEXT_PUBLIC_TEMPLATE_KIT_LINK}
     />
   );

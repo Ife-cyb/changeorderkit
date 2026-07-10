@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LogIn } from "lucide-react";
-import { signInAction } from "@/app/actions/auth";
+import { resendConfirmationAction, signInAction } from "@/app/actions/auth";
 
 export const metadata: Metadata = {
   title: "Sign in"
@@ -71,6 +71,28 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
               Sign in
             </button>
           </form>
+
+          <p className="mt-5 text-sm leading-6 text-[var(--ink-soft)]">
+            <Link className="font-bold text-[var(--accent-strong)] hover:text-[var(--accent)]" href="/forgot-password">
+              Forgot your password?
+            </Link>
+          </p>
+
+          <details className="mt-4 border-t border-[var(--border)] pt-4 text-sm text-[var(--ink-soft)]">
+            <summary className="cursor-pointer font-bold text-[var(--accent-strong)]">
+              Resend account confirmation
+            </summary>
+            <form action={resendConfirmationAction} className="mt-3 grid gap-3">
+              <input type="hidden" name="next" value={next} />
+              <label className="grid gap-2 font-bold text-[var(--ink)]">
+                Account email
+                <input className="field-control" name="email" type="email" autoComplete="email" required />
+              </label>
+              <button className="btn btn-secondary" type="submit">
+                Resend confirmation
+              </button>
+            </form>
+          </details>
 
           <p className="mt-5 text-sm leading-6 text-[var(--ink-soft)]">
             New to ChangeOrderKit?{" "}

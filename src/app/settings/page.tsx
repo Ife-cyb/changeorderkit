@@ -132,7 +132,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
               />
             </label>
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Default margin %
+              Default markup %
               <input
                 className="field-control"
                 name="defaultMarginPercent"

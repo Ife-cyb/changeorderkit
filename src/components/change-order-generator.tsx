@@ -31,7 +31,7 @@ import {
   formatDate,
   formatMoney,
   generateChangeOrder,
-  getPaymentState,
+  getPilotState,
   getTemplateKitState,
   sanitizeChangeOrderInput,
   validateChangeOrder,
@@ -40,12 +40,13 @@ import {
   type Tone,
   type ValidationErrors
 } from "@/lib/change-order";
+import { funnelEvents, totalBucket } from "@/lib/funnel";
 import { trackEvent } from "@/lib/tracking";
 
 type OutputMode = "document" | "email" | "invoice" | "follow-up";
 
 type Props = {
-  paymentLink?: string;
+  pilotLink?: string;
   templateKitLink?: string;
   initialInput?: ChangeOrderInput;
   savedOrderId?: string;
@@ -77,6 +78,14 @@ const paymentTimings: Array<{ value: PaymentTiming; label: string }> = [
   { value: "completion", label: "Due when added work is complete" },
   { value: "next-invoice", label: "Add to next invoice" }
 ];
+
+const currencies = [
+  { value: "USD", label: "USD — US dollar" },
+  { value: "CAD", label: "CAD — Canadian dollar" },
+  { value: "GBP", label: "GBP — British pound" },
+  { value: "AUD", label: "AUD — Australian dollar" },
+  { value: "NGN", label: "NGN — Nigerian naira" }
+] as const;
 
 const outputModes: Array<{ value: OutputMode; label: string }> = [
   { value: "document", label: "Document" },
@@ -297,7 +306,7 @@ function PrintableDocument({
               <td>{formatMoney(generated.breakdown.materials, input.currency)}</td>
             </tr>
             <tr>
-              <th scope="row">Margin/overhead</th>
+              <th scope="row">Markup/overhead</th>
               <td>{formatMoney(generated.breakdown.marginAmount, input.currency)}</td>
             </tr>
             <tr>
@@ -369,7 +378,7 @@ function PrintableDocument({
 }
 
 export function ChangeOrderGenerator({
-  paymentLink,
+  pilotLink,
   templateKitLink,
   initialInput,
   savedOrderId,
@@ -389,12 +398,14 @@ export function ChangeOrderGenerator({
   const [isSaving, startSaving] = useTransition();
   const outputRef = useRef<HTMLDivElement>(null);
   const toastTimerRef = useRef<number | null>(null);
+  const viewedTrackedRef = useRef(false);
+  const startedTrackedRef = useRef(false);
   const firstErrorRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(
     null
   );
 
   const generated = useMemo(() => generateChangeOrder(input), [input]);
-  const paymentState = getPaymentState(paymentLink);
+  const pilotState = getPilotState(pilotLink);
   const kitState = getTemplateKitState(templateKitLink);
   const hasErrors = Object.keys(errors).length > 0;
   const selectedOutput = outputText(generated, outputMode);
@@ -403,6 +414,13 @@ export function ChangeOrderGenerator({
   const documentLabelLower = documentLabel.toLowerCase();
   const isChangeOrder = input.documentType === "change-order";
   const isServiceAgreement = input.documentType === "service-agreement";
+
+  useEffect(() => {
+    if (!viewedTrackedRef.current) {
+      trackEvent(funnelEvents.generatorViewed, { document_type: input.documentType });
+      viewedTrackedRef.current = true;
+    }
+  }, [input.documentType]);
 
   useEffect(() => {
     const restoreId = window.setTimeout(() => {
@@ -443,11 +461,20 @@ export function ChangeOrderGenerator({
     }, 3500);
   }
 
+  function trackFormStarted() {
+    if (!startedTrackedRef.current) {
+      trackEvent(funnelEvents.formStarted, { document_type: input.documentType });
+      startedTrackedRef.current = true;
+    }
+  }
+
   function setTextField(field: keyof ChangeOrderInput, value: string) {
+    trackFormStarted();
     setInput((current) => ({ ...current, [field]: value }));
   }
 
   function setDocumentType(value: DocumentType) {
+    trackFormStarted();
     setInput((current) => {
       const nextDefault = createDefaultInput(businessProfile ?? undefined, value);
       const defaults = documentTypeOptions.map((option) => createDefaultInput(undefined, option.value));
@@ -481,6 +508,7 @@ export function ChangeOrderGenerator({
   }
 
   function setNumberField(field: keyof ChangeOrderInput, value: string) {
+    trackFormStarted();
     const parsed = Number.parseFloat(value);
     setInput((current) => ({ ...current, [field]: Number.isFinite(parsed) ? parsed : 0 }));
   }
@@ -512,16 +540,19 @@ export function ChangeOrderGenerator({
 
     if (!runValidation()) {
       showToast("Fix the highlighted fields before sending.");
-      trackEvent("validation_failed", { fields: Object.keys(validateChangeOrder(input)).join(",") });
+      trackEvent(funnelEvents.validationFailed, {
+        fields: Object.keys(validateChangeOrder(input)).join(",")
+      });
       return;
     }
 
     outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     showToast(activeCopy.generatedToast);
-    trackEvent("document_generated", {
+    trackEvent(funnelEvents.changeOrderGenerated, {
       document_type: input.documentType,
       industry: input.industry,
-      total: Math.round(generated.breakdown.total)
+      currency: input.currency,
+      total_bucket: totalBucket(generated.breakdown.total)
     });
   }
 
@@ -566,7 +597,7 @@ export function ChangeOrderGenerator({
     try {
       await navigator.clipboard.writeText(selectedOutput);
       showToast("Copied to clipboard.");
-      trackEvent("document_copied", {
+      trackEvent(funnelEvents.changeOrderCopied, {
         document_type: input.documentType,
         industry: input.industry,
         output: outputMode
@@ -592,7 +623,7 @@ export function ChangeOrderGenerator({
     link.remove();
     URL.revokeObjectURL(url);
     showToast("Downloaded text file.");
-    trackEvent("document_downloaded", {
+    trackEvent(funnelEvents.changeOrderDownloaded, {
       document_type: input.documentType,
       industry: input.industry,
       output: outputMode
@@ -606,7 +637,10 @@ export function ChangeOrderGenerator({
     }
 
     setOutputMode("document");
-    trackEvent("document_printed", { document_type: input.documentType, industry: input.industry });
+    trackEvent(funnelEvents.changeOrderPrinted, {
+      document_type: input.documentType,
+      industry: input.industry
+    });
     window.setTimeout(() => window.print(), 0);
   }
 
@@ -615,17 +649,17 @@ export function ChangeOrderGenerator({
     setInput(createDefaultInput(businessProfile ?? undefined, input.documentType));
     setErrors({});
     showToast("Example draft restored.");
-    trackEvent("draft_reset");
+    trackEvent(funnelEvents.draftReset);
   }
 
-  function handlePaymentClick() {
-    if (!paymentState.configured) {
-      showToast("Payment link not configured yet.");
-      trackEvent("payment_link_missing");
+  function handlePilotClick() {
+    if (!pilotState.configured) {
+      showToast("Paid pilot link not configured yet.");
+      trackEvent(funnelEvents.pilotLinkMissing);
       return;
     }
 
-    trackEvent("payment_cta_clicked");
+    trackEvent(funnelEvents.pilotCtaClicked, { source: "generator" });
   }
 
   function handleKitClick() {
@@ -639,7 +673,7 @@ export function ChangeOrderGenerator({
   }
 
   return (
-    <section className="tool-shell py-7 sm:py-10" aria-label="Document generator">
+    <section id="generator" className="tool-shell scroll-mt-6 py-7 sm:py-10" aria-label="Document generator">
       <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.45fr)] lg:items-end">
         <div>
           <p className="panel-kicker mb-3">
@@ -1001,7 +1035,7 @@ export function ChangeOrderGenerator({
             </label>
 
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Margin/overhead %
+              Markup/overhead %
               <input
                 className="field-control"
                 type="number"
@@ -1053,7 +1087,7 @@ export function ChangeOrderGenerator({
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 border-t border-[var(--border)] pt-5 md:grid-cols-3">
+          <div className="mt-5 grid gap-4 border-t border-[var(--border)] pt-5 md:grid-cols-4">
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Payment timing
               <select
@@ -1091,6 +1125,21 @@ export function ChangeOrderGenerator({
                 {tones.map((tone) => (
                   <option key={tone.value} value={tone.value}>
                     {tone.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+              Currency
+              <select
+                className="field-control"
+                value={input.currency}
+                onChange={(event) => setTextField("currency", event.target.value)}
+              >
+                {currencies.map((currency) => (
+                  <option key={currency.value} value={currency.value}>
+                    {currency.label}
                   </option>
                 ))}
               </select>
@@ -1229,21 +1278,21 @@ export function ChangeOrderGenerator({
                 Kit unavailable
               </button>
             )}
-            {paymentState.configured ? (
+            {pilotState.configured ? (
               <a
                 className="btn btn-secondary"
-                href={paymentState.href}
+                href={pilotState.href}
                 target="_blank"
                 rel="noreferrer"
-                onClick={handlePaymentClick}
+                onClick={handlePilotClick}
               >
                 <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                {paymentState.label}
+                {pilotState.label}
               </a>
             ) : (
-              <button type="button" className="btn btn-disabled" onClick={handlePaymentClick}>
+              <button type="button" className="btn btn-disabled" onClick={handlePilotClick}>
                 <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                {paymentState.label}
+                {pilotState.label}
               </button>
             )}
           </div>

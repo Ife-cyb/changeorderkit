@@ -31,4 +31,11 @@ describe("supabase rls migration", () => {
     expect(migration).toContain("change_orders_user_type_updated_idx");
     expect(migration).toContain("using ((select auth.uid()) = user_id)");
   });
+  it("creates account profiles through a locked-down auth trigger", () => {
+    expect(migration).toContain("create schema if not exists private");
+    expect(migration).toContain("after insert on auth.users");
+    expect(migration).toContain("security definer");
+    expect(migration).toContain("set search_path = ''");
+    expect(migration).toContain("revoke all on function private.create_profile_for_new_user()");
+  });
 });

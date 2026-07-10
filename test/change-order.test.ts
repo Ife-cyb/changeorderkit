@@ -6,14 +6,15 @@ import {
   documentTypeLabel,
   formatMoney,
   generateChangeOrder,
-  getPaymentState,
+  getPilotState,
   getTemplateKitState,
   sanitizeChangeOrderInput,
   validateChangeOrder
 } from "../src/lib/change-order";
+import { totalBucket } from "../src/lib/funnel";
 
 describe("change order math", () => {
-  it("calculates labor, margin, deposit, and total", () => {
+  it("calculates labor, markup, deposit, and total", () => {
     const breakdown = calculatePrice({
       ...defaultInput,
       laborHours: 6,
@@ -173,28 +174,37 @@ describe("validation", () => {
   });
 });
 
-describe("payment state", () => {
-  it("falls back safely when no payment link is configured", () => {
-    expect(getPaymentState("").configured).toBe(false);
-    expect(getPaymentState("").label).toBe("Payment link not configured yet");
+describe("external links and funnel data", () => {
+  it("falls back safely when no paid-pilot link is configured", () => {
+    expect(getPilotState("").configured).toBe(false);
+    expect(getPilotState("").label).toBe("Paid pilot link not configured yet");
   });
 
-  it("uses the configured external payment URL", () => {
-    const state = getPaymentState("https://example.com/pay");
+  it("uses the configured external pilot URL", () => {
+    const state = getPilotState("https://example.com/pilot");
 
     expect(state.configured).toBe(true);
-    expect(state.href).toBe("https://example.com/pay");
+    expect(state.href).toBe("https://example.com/pilot");
+    expect(state.label).toBe("Join paid approval-link pilot");
   });
 
-  it("rejects malformed or unsafe payment URLs", () => {
-    expect(getPaymentState("not a url").configured).toBe(false);
-    expect(getPaymentState("javascript:alert(1)").configured).toBe(false);
-    expect(getPaymentState("ftp://example.com/pay").configured).toBe(false);
+  it("rejects malformed or unsafe pilot URLs", () => {
+    expect(getPilotState("not a url").configured).toBe(false);
+    expect(getPilotState("javascript:alert(1)").configured).toBe(false);
+    expect(getPilotState("ftp://example.com/pilot").configured).toBe(false);
   });
 
   it("falls back safely when no template kit link is configured", () => {
     expect(getTemplateKitState("").configured).toBe(false);
     expect(getTemplateKitState("").label).toBe("Template kit link not configured yet");
     expect(getTemplateKitState("https://gumroad.com/l/changeorderkit").configured).toBe(true);
+  });
+
+  it("buckets totals instead of exposing exact client prices to analytics", () => {
+    expect(totalBucket(0)).toBe("0");
+    expect(totalBucket(499)).toBe("1-499");
+    expect(totalBucket(1_999)).toBe("500-1999");
+    expect(totalBucket(4_999)).toBe("2000-4999");
+    expect(totalBucket(5_000)).toBe("5000+");
   });
 });
