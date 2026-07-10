@@ -33,3 +33,4 @@ export function totalBucket(total: number) {
 
   return "5000+";
 }
+

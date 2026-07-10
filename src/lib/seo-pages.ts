@@ -160,6 +160,81 @@ export const seoPages: Record<string, SeoPage> = {
           "Late fees, interest, liens, and legal escalation depend on contracts and local law. Keep the first version businesslike."
       }
     ]
+  },
+  "work-order-template": {
+    slug: "work-order-template",
+    title: "Work Order Template for Contractors",
+    description:
+      "Create a contractor work order with scope of work, job location, schedule, payment terms, exclusions, and client approval language.",
+    kicker: "Work order",
+    primaryCta: "Create a work order",
+    sections: [
+      {
+        heading: "Confirm the job before scheduling",
+        body:
+          "A work order gives the client a clear record of what is included, where the job happens, what it costs, and what needs to be ready before work starts."
+      },
+      {
+        heading: "Name client responsibilities",
+        body:
+          "Site access, selections, owner-supplied materials, and timely approvals can affect schedule and cost. Put those responsibilities in writing."
+      },
+      {
+        heading: "Keep changes separate",
+        body:
+          "Once the work order is approved, added requests should move through a written change order so the original job stays clean."
+      }
+    ]
+  },
+  "service-agreement-template": {
+    slug: "service-agreement-template",
+    title: "Service Agreement Template Starter",
+    description:
+      "Draft a practical service agreement starter with service scope, payment schedule, change policy, cancellation language, exclusions, and signature blocks.",
+    kicker: "Agreement starter",
+    primaryCta: "Draft a service agreement",
+    sections: [
+      {
+        heading: "Use clear business terms",
+        body:
+          "A service agreement starter should explain the services, payment schedule, exclusions, change process, and responsibilities in plain language."
+      },
+      {
+        heading: "Include a change policy",
+        body:
+          "Scope changes are easier to manage when the agreement says added work must be priced and approved before it is scheduled."
+      },
+      {
+        heading: "Review before relying on it",
+        body:
+          "Agreement language can depend on location, trade, licensing, and local rules. Treat this as a business starter and have legal terms reviewed."
+      }
+    ]
+  },
+  "contractor-work-order-generator": {
+    slug: "contractor-work-order-generator",
+    title: "Contractor Work Order Generator",
+    description:
+      "Generate work orders for home-service and contractor jobs with pricing, schedule notes, client responsibilities, and approval language.",
+    kicker: "Generator",
+    primaryCta: "Generate a work order",
+    sections: [
+      {
+        heading: "Start from the job details",
+        body:
+          "Enter the client, project, location, scope, labor, materials, deposit, and schedule notes to build a clean work order."
+      },
+      {
+        heading: "Send a client-ready document",
+        body:
+          "The generator creates a printable document and a client email so approval can happen before labor or materials are committed."
+      },
+      {
+        heading: "Save repeat jobs",
+        body:
+          "Signed-in users can save, duplicate, archive, and reopen work order drafts from the dashboard."
+      }
+    ]
   }
 };
 
