@@ -215,9 +215,18 @@ export function calculatePrice(input: ChangeOrderInput): PriceBreakdown {
 }
 
 export function formatMoney(value: number, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
+  const normalizedCurrency = normalizeCurrency(currency);
+  const localeByCurrency: Record<string, string> = {
+    USD: "en-US",
+    CAD: "en-CA",
+    GBP: "en-GB",
+    AUD: "en-AU",
+    NGN: "en-NG"
+  };
+
+  return new Intl.NumberFormat(localeByCurrency[normalizedCurrency] ?? "en-US", {
     style: "currency",
-    currency: normalizeCurrency(currency),
+    currency: normalizedCurrency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(Number.isFinite(value) ? value : 0);
@@ -329,7 +338,7 @@ export function validateChangeOrder(input: ChangeOrderInput): ValidationErrors {
   }
 
   if (input.marginPercent < 0 || input.marginPercent > 80) {
-    errors.marginPercent = "Use a margin from 0% to 80%.";
+    errors.marginPercent = "Use a markup from 0% to 80%.";
   }
 
   if (input.rushPercent < 0 || input.rushPercent > 100) {
@@ -343,14 +352,14 @@ export function validateChangeOrder(input: ChangeOrderInput): ValidationErrors {
   return errors;
 }
 
-export function getPaymentState(paymentLink?: string | null) {
-  const trimmed = paymentLink?.trim() ?? "";
+export function getPilotState(pilotLink?: string | null) {
+  const trimmed = pilotLink?.trim() ?? "";
 
   if (!trimmed) {
     return {
       configured: false,
       href: "",
-      label: "Payment link not configured yet"
+      label: "Paid approval-link pilot opening soon"
     };
   }
 
@@ -358,19 +367,19 @@ export function getPaymentState(paymentLink?: string | null) {
     const url = new URL(trimmed);
 
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new Error("Unsupported payment link protocol");
+      throw new Error("Unsupported pilot link protocol");
     }
 
     return {
       configured: true,
       href: url.href,
-      label: "Unlock polished export"
+      label: "Join the paid approval-link pilot"
     };
   } catch {
     return {
       configured: false,
       href: "",
-      label: "Payment link not configured yet"
+      label: "Paid approval-link pilot opening soon"
     };
   }
 }
@@ -397,7 +406,7 @@ export function generateChangeOrder(input: ChangeOrderInput): GeneratedChangeOrd
     "Price breakdown:",
     `Extra labor: ${input.laborHours || 0} hours at ${formatMoney(input.hourlyRate || 0, input.currency)}/hour = ${formatMoney(breakdown.labor, input.currency)}`,
     `Materials and direct costs: ${formatMoney(breakdown.materials, input.currency)}`,
-    `Margin/overhead allowance: ${clampNumber(input.marginPercent, 0, 80)}% = ${formatMoney(breakdown.marginAmount, input.currency)}`,
+    `Markup/overhead allowance: ${clampNumber(input.marginPercent, 0, 80)}% = ${formatMoney(breakdown.marginAmount, input.currency)}`,
     `Rush/disruption fee: ${clampNumber(input.rushPercent, 0, 100)}% = ${formatMoney(breakdown.rushAmount, input.currency)}`,
     "",
     `Total change order amount: ${total}`,

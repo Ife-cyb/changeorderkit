@@ -19,7 +19,7 @@ import {
   defaultInput,
   formatMoney,
   generateChangeOrder,
-  getPaymentState,
+  getPilotState,
   sanitizeChangeOrderInput,
   validateChangeOrder,
   type Industry,
@@ -27,10 +27,11 @@ import {
   type Tone,
   type ValidationErrors
 } from "@/lib/change-order";
+import { funnelEvents, totalBucket } from "@/lib/funnel";
 import { trackEvent } from "@/lib/tracking";
 
 type Props = {
-  paymentLink?: string;
+  pilotLink?: string;
 };
 
 const storageKey = "changeorderkit:draft:v1";
@@ -55,6 +56,14 @@ const paymentTimings: Array<{ value: PaymentTiming; label: string }> = [
   { value: "completion", label: "Due when added work is complete" },
   { value: "next-invoice", label: "Add to next invoice" }
 ];
+
+const currencies = [
+  { value: "USD", label: "USD — US dollar" },
+  { value: "CAD", label: "CAD — Canadian dollar" },
+  { value: "GBP", label: "GBP — British pound" },
+  { value: "AUD", label: "AUD — Australian dollar" },
+  { value: "NGN", label: "NGN — Nigerian naira" }
+] as const;
 
 function parseSavedDraft(value: string | null): ChangeOrderInput | null {
   if (!value) {
@@ -105,26 +114,38 @@ function InputError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-export function ChangeOrderGenerator({ paymentLink }: Props) {
+export function ChangeOrderGenerator({ pilotLink }: Props) {
   const [input, setInput] = useState<ChangeOrderInput>(defaultInput);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [toast, setToast] = useState("");
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [hasGenerated, setHasGenerated] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
   const toastTimerRef = useRef<number | null>(null);
+  const formStartedRef = useRef(false);
+  const generatorViewedRef = useRef(false);
   const firstErrorRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(
     null
   );
 
   const generated = useMemo(() => generateChangeOrder(input), [input]);
-  const paymentState = getPaymentState(paymentLink);
+  const pilotState = getPilotState(pilotLink);
   const hasErrors = Object.keys(errors).length > 0;
 
   useEffect(() => {
     const restoreId = window.setTimeout(() => {
-      setInput(readSavedDraft() ?? createDefaultInput());
+      const savedDraft = readSavedDraft();
+      setInput(savedDraft ?? createDefaultInput());
 
       setDraftLoaded(true);
+
+      if (!generatorViewedRef.current) {
+        generatorViewedRef.current = true;
+        trackEvent(funnelEvents.generatorViewed, {
+          draft_restored: Boolean(savedDraft),
+          source: "home"
+        });
+      }
     }, 0);
 
     return () => window.clearTimeout(restoreId);
@@ -159,12 +180,29 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
   }
 
   function setTextField(field: keyof ChangeOrderInput, value: string) {
+    markFormStarted(field);
+    setHasGenerated(false);
     setInput((current) => ({ ...current, [field]: value }));
   }
 
   function setNumberField(field: keyof ChangeOrderInput, value: string) {
+    markFormStarted(field);
+    setHasGenerated(false);
     const parsed = Number.parseFloat(value);
     setInput((current) => ({ ...current, [field]: Number.isFinite(parsed) ? parsed : 0 }));
+  }
+
+  function markFormStarted(field: keyof ChangeOrderInput) {
+    if (formStartedRef.current) {
+      return;
+    }
+
+    formStartedRef.current = true;
+    trackEvent(funnelEvents.formStarted, {
+      first_field: field,
+      industry: input.industry,
+      currency: input.currency
+    });
   }
 
   function registerFirstError(
@@ -194,15 +232,19 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
 
     if (!runValidation()) {
       showToast("Fix the highlighted fields before sending.");
-      trackEvent("validation_failed", { fields: Object.keys(validateChangeOrder(input)).join(",") });
+      trackEvent(funnelEvents.validationFailed, {
+        fields: Object.keys(validateChangeOrder(input)).join(",")
+      });
       return;
     }
 
+    setHasGenerated(true);
     outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     showToast("Change order generated.");
-    trackEvent("change_order_generated", {
+    trackEvent(funnelEvents.changeOrderGenerated, {
       industry: input.industry,
-      total: Math.round(generated.breakdown.total)
+      currency: input.currency,
+      total_bucket: totalBucket(generated.breakdown.total)
     });
   }
 
@@ -215,7 +257,10 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
     try {
       await navigator.clipboard.writeText(generated.fullDocument);
       showToast("Copied to clipboard.");
-      trackEvent("change_order_copied", { industry: input.industry });
+      trackEvent(funnelEvents.changeOrderCopied, {
+        industry: input.industry,
+        currency: input.currency
+      });
     } catch {
       showToast("Copy failed. Select the document text and copy manually.");
     }
@@ -237,7 +282,10 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
     link.remove();
     URL.revokeObjectURL(url);
     showToast("Downloaded text file.");
-    trackEvent("change_order_downloaded", { industry: input.industry });
+    trackEvent(funnelEvents.changeOrderDownloaded, {
+      industry: input.industry,
+      currency: input.currency
+    });
   }
 
   function printDocument() {
@@ -246,7 +294,10 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
       return;
     }
 
-    trackEvent("change_order_printed", { industry: input.industry });
+    trackEvent(funnelEvents.changeOrderPrinted, {
+      industry: input.industry,
+      currency: input.currency
+    });
     window.print();
   }
 
@@ -254,27 +305,36 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
     clearSavedDraft();
     setInput(createDefaultInput());
     setErrors({});
+    setHasGenerated(false);
     showToast("Example draft restored.");
-    trackEvent("draft_reset");
+    trackEvent(funnelEvents.draftReset);
   }
 
-  function handlePaymentClick() {
-    if (!paymentState.configured) {
-      showToast("Payment link not configured yet.");
-      trackEvent("payment_link_missing");
+  function handlePilotClick() {
+    if (!pilotState.configured) {
+      showToast("The paid approval-link pilot is opening soon.");
+      trackEvent(funnelEvents.pilotLinkMissing, { source: "generator" });
       return;
     }
 
-    trackEvent("payment_cta_clicked");
+    trackEvent(funnelEvents.pilotCtaClicked, {
+      source: "generator",
+      industry: input.industry,
+      currency: input.currency
+    });
   }
 
   return (
-    <section className="tool-shell py-8 sm:py-10" aria-label="Change order generator">
+    <section
+      id="generator"
+      className="tool-shell scroll-mt-6 py-8 sm:py-10"
+      aria-label="Change order generator"
+    >
       <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(280px,0.45fr)] lg:items-end">
         <div>
           <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-3 py-1 text-sm font-bold text-teal-800">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Change order and payment protection
+            Extra-work pricing and approval record
           </p>
           <h1 className="max-w-4xl text-4xl font-black leading-tight text-slate-950 sm:text-5xl lg:text-6xl">
             Turn client changes into approved, paid work before you start.
@@ -304,7 +364,7 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <label className="grid gap-2 text-sm font-bold text-slate-800">
               Your business
               <input
@@ -354,6 +414,21 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
                 {industries.map((industry) => (
                   <option key={industry.value} value={industry.value}>
                     {industry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2 text-sm font-bold text-slate-800">
+              Currency
+              <select
+                className="field-control"
+                value={input.currency}
+                onChange={(event) => setTextField("currency", event.target.value)}
+              >
+                {currencies.map((currency) => (
+                  <option key={currency.value} value={currency.value}>
+                    {currency.label}
                   </option>
                 ))}
               </select>
@@ -444,7 +519,7 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             </label>
 
             <label className="grid gap-2 text-sm font-bold text-slate-800">
-              Margin/overhead %
+              Markup/overhead %
               <input
                 className="field-control"
                 type="number"
@@ -556,10 +631,12 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             <div>
               <p className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-teal-800">
                 <FileText className="h-4 w-4" aria-hidden="true" />
-                Ready-to-send output
+                {hasGenerated ? "Ready-to-send output" : "Document preview"}
               </p>
               <h2 className="mt-2 text-2xl font-black text-slate-950">
-                Review, copy, download, or print.
+                {hasGenerated
+                  ? "Review, copy, download, or print."
+                  : "Complete the form, then generate your change order."}
               </h2>
             </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-900">
@@ -568,6 +645,8 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             </div>
           </div>
 
+          {hasGenerated ? (
+            <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="metric-box">
               <span className="block text-xs font-black uppercase tracking-[0.12em] text-slate-500">
@@ -611,7 +690,7 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
             {generated.fullDocument}
           </div>
 
-          <div className="no-print mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="no-print mt-5 grid gap-3 sm:grid-cols-2">
             <button type="button" className="btn btn-primary" onClick={copyDocument}>
               <Copy className="h-5 w-5" aria-hidden="true" />
               Copy
@@ -624,24 +703,39 @@ export function ChangeOrderGenerator({ paymentLink }: Props) {
               <Printer className="h-5 w-5" aria-hidden="true" />
               Print / PDF
             </button>
-            {paymentState.configured ? (
+            {pilotState.configured ? (
               <a
                 className="btn btn-secondary"
-                href={paymentState.href}
+                href={pilotState.href}
                 target="_blank"
                 rel="noreferrer"
-                onClick={handlePaymentClick}
+                onClick={handlePilotClick}
               >
                 <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                {paymentState.label}
+                {pilotState.label}
               </a>
             ) : (
-              <button type="button" className="btn btn-disabled" onClick={handlePaymentClick}>
+              <button type="button" className="btn btn-disabled" onClick={handlePilotClick}>
                 <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                {paymentState.label}
+                {pilotState.label}
               </button>
             )}
           </div>
+            </>
+          ) : (
+            <div className="mt-5 grid min-h-64 place-items-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+              <div className="max-w-md">
+                <FileText className="mx-auto h-10 w-10 text-teal-700" aria-hidden="true" />
+                <h3 className="mt-3 text-lg font-black text-slate-950">
+                  Your client-ready record will appear here
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  We will calculate the added price and create the approval email only after you
+                  review the project details and select Generate change order.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div aria-live="polite" className="no-print mt-3 min-h-6 text-sm font-bold text-teal-800">
             {toast}

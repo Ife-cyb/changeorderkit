@@ -65,14 +65,14 @@ export const seoPages: Record<string, SeoPage> = {
     slug: "contractor-change-order-calculator",
     title: "Contractor Change Order Calculator",
     description:
-      "Calculate labor, materials, margin, rush fees, deposit, and total price for added contractor work.",
+      "Calculate labor, materials, markup, rush fees, deposit, and total price for added contractor work.",
     kicker: "Calculator",
     primaryCta: "Calculate added work",
     sections: [
       {
         heading: "Price more than materials",
         body:
-          "Added work often affects schedule, setup, procurement, cleanup, and coordination. Include labor and margin, not only material cost."
+          "Added work often affects schedule, setup, procurement, cleanup, and coordination. Include labor and markup, not only material cost."
       },
       {
         heading: "Use deposits for risk",

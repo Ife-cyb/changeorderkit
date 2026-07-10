@@ -53,6 +53,9 @@ export default function RootLayout({
               </span>
             </Link>
             <nav className="flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-700">
+              <Link className="hover:text-teal-700" href="/remodeling-change-orders">
+                For remodelers
+              </Link>
               <Link className="hover:text-teal-700" href="/change-order-template">
                 Template
               </Link>
