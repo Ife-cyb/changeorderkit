@@ -17,9 +17,10 @@ export default function PrivacyPage() {
           project details, or generated documents on our servers.
         </p>
         <p>
-          If analytics are enabled on the hosting platform, they may collect standard aggregate
-          usage events such as page views and button clicks. Do not enter sensitive personal,
-          financial, medical, or legal information into the tool.
+          If analytics are enabled on the hosting platform, they may collect aggregate events
+          such as page views, button clicks, selected industry and currency, and a broad price
+          range. Analytics events do not include client names, scope text, or generated documents.
+          Do not enter sensitive personal, financial, medical, or legal information into the tool.
         </p>
       </div>
     </article>

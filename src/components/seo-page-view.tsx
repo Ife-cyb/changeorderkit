@@ -32,7 +32,7 @@ export function SeoPageView({ page }: { page: SeoPage }) {
             </li>
             <li className="flex gap-2">
               <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" aria-hidden="true" />
-              Add labor, materials, margin, and deposit.
+              Add labor, materials, markup, and deposit.
             </li>
             <li className="flex gap-2">
               <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" aria-hidden="true" />
