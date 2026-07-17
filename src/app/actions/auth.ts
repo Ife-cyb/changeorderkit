@@ -39,6 +39,30 @@ function recoveryCallback() {
   return new URL("/auth/recovery", siteUrl()).toString();
 }
 
+function friendlySignInError(code: string | undefined, message: string) {
+  if (code === "email_not_confirmed" || message.toLowerCase().includes("email not confirmed")) {
+    return "Confirm your email before signing in. Check your inbox and spam folder, or request another confirmation below.";
+  }
+
+  if (code === "invalid_credentials" || message.toLowerCase().includes("invalid login credentials")) {
+    return "The email or password is not correct. If you created this account before, use the original password or reset it below—creating the account again does not replace its password.";
+  }
+
+  return message;
+}
+
+function friendlyEmailError(code: string | undefined, message: string) {
+  if (code === "email_address_not_authorized") {
+    return "Email delivery is not available for that address yet. Please try again later.";
+  }
+
+  if (code === "over_email_send_rate_limit" || code === "over_request_rate_limit") {
+    return "Too many email requests were made. Wait a few minutes, then try again.";
+  }
+
+  return message;
+}
+
 export async function signInAction(formData: FormData) {
   const next = safeNextPath(formData.get("next"));
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -55,7 +79,7 @@ export async function signInAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(search("/sign-in", { next, error: error.message }));
+    redirect(search("/sign-in", { next, error: friendlySignInError(error.code, error.message) }));
   }
 
   redirect(next);
@@ -84,7 +108,7 @@ export async function signUpAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(search("/sign-up", { next, error: error.message }));
+    redirect(search("/sign-up", { next, error: friendlyEmailError(error.code, error.message) }));
   }
 
   if (data.user && data.session) {
@@ -103,7 +127,8 @@ export async function signUpAction(formData: FormData) {
   redirect(
     search("/sign-in", {
       next,
-      message: "Check your email to confirm your account, then sign in."
+      message:
+        "If this is a new account, check your inbox and spam folder for a confirmation link. If you created the account before, use the original password or reset it—signing up again does not change an existing password."
     })
   );
 }
@@ -130,13 +155,14 @@ export async function resendConfirmationAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(search("/sign-in", { next, error: error.message }));
+    redirect(search("/sign-in", { next, error: friendlyEmailError(error.code, error.message) }));
   }
 
   redirect(
     search("/sign-in", {
       next,
-      message: "If that account is awaiting confirmation, a new email is on its way."
+      message:
+        "If the account is still awaiting confirmation, a new email is on its way. Already-confirmed accounts do not receive another confirmation; reset the password if you cannot sign in."
     })
   );
 }
@@ -158,12 +184,13 @@ export async function requestPasswordResetAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(search("/forgot-password", { error: error.message }));
+    redirect(search("/forgot-password", { error: friendlyEmailError(error.code, error.message) }));
   }
 
   redirect(
     search("/forgot-password", {
-      message: "If an account exists for that email, a password-reset link is on its way."
+      message:
+        "If an account exists for that email, a password-reset link is on its way. Check your inbox and spam folder."
     })
   );
 }
