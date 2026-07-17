@@ -43,6 +43,29 @@ export default async function SignUpPage({ searchParams }: { searchParams: Searc
             </p>
           ) : null}
 
+          <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--paper-deep)] p-3 text-sm leading-6 text-[var(--ink-soft)]">
+            <p>
+              Use this form only for a new account. If you have registered this email before,
+              signing up again will not replace the original password.
+            </p>
+            <p className="mt-2">
+              <Link
+                className="font-bold text-[var(--accent-strong)] hover:text-[var(--accent)]"
+                href={`/sign-in?next=${encodeURIComponent(next)}`}
+              >
+                Sign in
+              </Link>{" "}
+              with the original password or{" "}
+              <Link
+                className="font-bold text-[var(--accent-strong)] hover:text-[var(--accent)]"
+                href="/forgot-password"
+              >
+                reset your password
+              </Link>
+              .
+            </p>
+          </div>
+
           <form action={signUpAction} className="grid gap-4">
             <input type="hidden" name="next" value={next} />
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
@@ -65,6 +88,11 @@ export default async function SignUpPage({ searchParams }: { searchParams: Searc
               Create account
             </button>
           </form>
+
+          <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
+            New accounts must be confirmed by email. Check your inbox and spam folder after
+            submitting.
+          </p>
 
           <p className="mt-5 text-sm leading-6 text-[var(--ink-soft)]">
             Already have an account?{" "}
