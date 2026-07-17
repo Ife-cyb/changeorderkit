@@ -45,7 +45,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
           ) : null}
 
           {message ? (
-            <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--accent-soft)] p-3 text-sm font-bold text-[var(--accent-strong)]">
+            <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--accent-soft)] p-3 text-sm font-bold leading-6 text-[var(--accent-strong)]">
               {message}
             </p>
           ) : null}
@@ -72,16 +72,28 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
             </button>
           </form>
 
-          <p className="mt-5 text-sm leading-6 text-[var(--ink-soft)]">
-            <Link className="font-bold text-[var(--accent-strong)] hover:text-[var(--accent)]" href="/forgot-password">
-              Forgot your password?
+          <div className="mt-5 rounded-lg border border-[var(--border)] bg-[var(--paper-deep)] p-3 text-sm leading-6 text-[var(--ink-soft)]">
+            <p className="font-bold text-[var(--ink)]">Cannot sign in?</p>
+            <p className="mt-1">
+              If you registered this email before, use the original password. Creating the account
+              again does not change it.
+            </p>
+            <Link
+              className="mt-2 inline-block font-bold text-[var(--accent-strong)] hover:text-[var(--accent)]"
+              href="/forgot-password"
+            >
+              Reset your password
             </Link>
-          </p>
+          </div>
 
           <details className="mt-4 border-t border-[var(--border)] pt-4 text-sm text-[var(--ink-soft)]">
             <summary className="cursor-pointer font-bold text-[var(--accent-strong)]">
-              Resend account confirmation
+              Did not receive a confirmation email?
             </summary>
+            <p className="mt-3 leading-6">
+              Request another email only if the account has not been confirmed. Confirmed accounts
+              do not receive another signup email; use password reset instead.
+            </p>
             <form action={resendConfirmationAction} className="mt-3 grid gap-3">
               <input type="hidden" name="next" value={next} />
               <label className="grid gap-2 font-bold text-[var(--ink)]">
