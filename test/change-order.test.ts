@@ -12,6 +12,7 @@ import {
   getPilotState,
   getTemplateKitState,
   isExampleInput,
+  nextDate,
   sanitizeChangeOrderInput,
   validateChangeOrder
 } from "../src/lib/change-order";
@@ -118,6 +119,15 @@ describe("change order math", () => {
 });
 
 describe("generated copy", () => {
+  it("builds default dates from the local calendar day", () => {
+    const today = new Date();
+    const expected = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
+      today.getDate()
+    ).padStart(2, "0")}`;
+
+    expect(nextDate(0)).toBe(expected);
+  });
+
   it("creates a blank input while preserving preferences and profile defaults", () => {
     const blank = createBlankInput(
       {
