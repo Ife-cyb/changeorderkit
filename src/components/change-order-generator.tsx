@@ -244,6 +244,17 @@ function preferredScrollBehavior(): ScrollBehavior {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 
+function printWithDocumentTitle(title: string) {
+  const previousTitle = document.title;
+  document.title = title;
+
+  try {
+    window.print();
+  } finally {
+    document.title = previousTitle;
+  }
+}
+
 function InputError({ id, message }: { id: string; message?: string }) {
   if (!message) {
     return null;
@@ -765,7 +776,10 @@ export function ChangeOrderGenerator({
       document_type: input.documentType,
       industry: input.industry
     });
-    window.setTimeout(() => window.print(), 0);
+    window.setTimeout(
+      () => printWithDocumentTitle(input.documentTitle.trim() || documentLabel),
+      0
+    );
   }
 
   function resetDraft() {
@@ -1456,7 +1470,7 @@ export function ChangeOrderGenerator({
           </p>
 
           <div className={actionGridClass}>
-            <button type="button" className="btn btn-primary" onClick={copyDocument}>
+            <button type="button" className="btn btn-secondary" onClick={copyDocument}>
               <Copy className="h-5 w-5" aria-hidden="true" />
               Copy
             </button>
@@ -1464,7 +1478,7 @@ export function ChangeOrderGenerator({
               <Download className="h-5 w-5" aria-hidden="true" />
               Download text
             </button>
-            <button type="button" className="btn btn-secondary" onClick={printDocument}>
+            <button type="button" className="btn btn-primary" onClick={printDocument}>
               <Printer className="h-5 w-5" aria-hidden="true" />
               Print / PDF
             </button>
