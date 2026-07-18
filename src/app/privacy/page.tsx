@@ -14,7 +14,7 @@ export default function PrivacyPage() {
           Privacy Policy
         </h1>
         <p className="mt-2 text-sm font-bold text-[var(--muted)]">
-          Last updated: 17 July 2026
+          Last updated: 18 July 2026
         </p>
 
         <div className="mt-8 space-y-8 text-base leading-8 text-[var(--ink-soft)]">
@@ -76,9 +76,11 @@ export default function PrivacyPage() {
             <h2 className={headingClass}>Service providers and international processing</h2>
             <p>
               ChangeOrderKit uses service providers including Supabase for authentication and
-              database services and Vercel for hosting, analytics, and application delivery.
-              External payment or checkout providers process information under their own privacy
-              terms. These providers may process information outside your country, subject to their
+              database services, Resend for delivery of account and security emails, and Vercel for
+              hosting, analytics, and application delivery. To deliver those emails, Resend
+              processes recipient addresses, message content, and delivery metadata. External
+              payment or checkout providers process information under their own privacy terms.
+              These providers may process information outside your country, subject to their
               safeguards and applicable law.
             </p>
             <p>ChangeOrderKit does not sell personal information.</p>
