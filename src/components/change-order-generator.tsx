@@ -48,6 +48,13 @@ import { funnelEvents, totalBucket } from "@/lib/funnel";
 import { trackEvent } from "@/lib/tracking";
 
 type OutputMode = "document" | "email" | "invoice" | "follow-up";
+type NumericField =
+  | "laborHours"
+  | "hourlyRate"
+  | "materialsCost"
+  | "marginPercent"
+  | "rushPercent"
+  | "depositPercent";
 
 type Props = {
   pilotLink?: string;
@@ -481,6 +488,7 @@ export function ChangeOrderGenerator({
   const [currentOrderId, setCurrentOrderId] = useState(savedOrderId ?? "");
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [toast, setToast] = useState("");
+  const [numericDrafts, setNumericDrafts] = useState<Partial<Record<NumericField, string>>>({});
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [autosaveAvailable, setAutosaveAvailable] = useState(true);
@@ -538,6 +546,7 @@ export function ChangeOrderGenerator({
       const fallback = createDefaultInput(businessProfile ?? undefined);
       const restored = useLocalDraft ? readSavedDraft() : null;
       setInput(restored?.input ?? sanitizeChangeOrderInput(initialInput ?? fallback));
+      setNumericDrafts({});
       setLastSavedAt(restored?.savedAt ?? null);
       setDraftLoaded(true);
     }, 0);
@@ -640,10 +649,23 @@ export function ChangeOrderGenerator({
     setErrors({});
   }
 
-  function setNumberField(field: keyof ChangeOrderInput, value: string) {
+  function setNumberField(field: NumericField, value: string) {
     trackFormStarted();
+    setNumericDrafts((current) => ({ ...current, [field]: value }));
     const parsed = Number.parseFloat(value);
     setInput((current) => ({ ...current, [field]: Number.isFinite(parsed) ? parsed : 0 }));
+  }
+
+  function numberFieldValue(field: NumericField) {
+    return numericDrafts[field] ?? String(input[field]);
+  }
+
+  function normalizeNumberField(field: NumericField) {
+    setNumericDrafts((current) => {
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
   }
 
   function registerFirstError(
@@ -785,6 +807,7 @@ export function ChangeOrderGenerator({
   function resetDraft() {
     clearSavedDraft();
     setInput(createDefaultInput(businessProfile ?? undefined, input.documentType));
+    setNumericDrafts({});
     setErrors({});
     showToast("Example draft restored.");
     trackEvent(funnelEvents.draftReset);
@@ -793,6 +816,7 @@ export function ChangeOrderGenerator({
   function clearToBlank(eventName: "example_cleared" | "form_cleared", message: string) {
     clearSavedDraft();
     setInput(createBlankInput(businessProfile ?? undefined, input.documentType));
+    setNumericDrafts({});
     setErrors({});
     setLastSavedAt(null);
     showToast(message);
@@ -1188,10 +1212,11 @@ export function ChangeOrderGenerator({
                 min="0"
                 step="0.25"
                 inputMode="decimal"
-                value={input.laborHours}
+                value={numberFieldValue("laborHours")}
                 aria-invalid={Boolean(errors.laborHours)}
                 aria-describedby={errors.laborHours ? "laborHours-error" : undefined}
                 onChange={(event) => setNumberField("laborHours", event.target.value)}
+                onBlur={() => normalizeNumberField("laborHours")}
               />
               <InputError id="laborHours-error" message={errors.laborHours} />
             </label>
@@ -1204,10 +1229,11 @@ export function ChangeOrderGenerator({
                 min="0"
                 step="1"
                 inputMode="decimal"
-                value={input.hourlyRate}
+                value={numberFieldValue("hourlyRate")}
                 aria-invalid={Boolean(errors.hourlyRate)}
                 aria-describedby={errors.hourlyRate ? "hourlyRate-error" : undefined}
                 onChange={(event) => setNumberField("hourlyRate", event.target.value)}
+                onBlur={() => normalizeNumberField("hourlyRate")}
               />
               <InputError id="hourlyRate-error" message={errors.hourlyRate} />
             </label>
@@ -1220,10 +1246,11 @@ export function ChangeOrderGenerator({
                 min="0"
                 step="1"
                 inputMode="decimal"
-                value={input.materialsCost}
+                value={numberFieldValue("materialsCost")}
                 aria-invalid={Boolean(errors.materialsCost)}
                 aria-describedby={errors.materialsCost ? "materialsCost-error" : undefined}
                 onChange={(event) => setNumberField("materialsCost", event.target.value)}
+                onBlur={() => normalizeNumberField("materialsCost")}
               />
               <InputError id="materialsCost-error" message={errors.materialsCost} />
             </label>
@@ -1237,7 +1264,7 @@ export function ChangeOrderGenerator({
                 max="80"
                 step="1"
                 inputMode="decimal"
-                value={input.marginPercent}
+                value={numberFieldValue("marginPercent")}
                 aria-invalid={Boolean(errors.marginPercent)}
                 aria-describedby={
                   errors.marginPercent
@@ -1245,6 +1272,7 @@ export function ChangeOrderGenerator({
                     : "marginPercent-help"
                 }
                 onChange={(event) => setNumberField("marginPercent", event.target.value)}
+                onBlur={() => normalizeNumberField("marginPercent")}
               />
               <span id="marginPercent-help" className="text-sm font-medium leading-6 text-[var(--muted)]">
                 One combined percentage applied to labor and materials and shown as one allowance.
@@ -1261,12 +1289,13 @@ export function ChangeOrderGenerator({
                 max="100"
                 step="1"
                 inputMode="decimal"
-                value={input.rushPercent}
+                value={numberFieldValue("rushPercent")}
                 aria-invalid={Boolean(errors.rushPercent)}
                 aria-describedby={
                   errors.rushPercent ? "rushPercent-help rushPercent-error" : "rushPercent-help"
                 }
                 onChange={(event) => setNumberField("rushPercent", event.target.value)}
+                onBlur={() => normalizeNumberField("rushPercent")}
               />
               <span id="rushPercent-help" className="text-sm font-medium leading-6 text-[var(--muted)]">
                 One combined fee for accelerated timing or disruption, itemized as a single line.
@@ -1283,10 +1312,11 @@ export function ChangeOrderGenerator({
                 max="100"
                 step="1"
                 inputMode="decimal"
-                value={input.depositPercent}
+                value={numberFieldValue("depositPercent")}
                 aria-invalid={Boolean(errors.depositPercent)}
                 aria-describedby={errors.depositPercent ? "depositPercent-error" : undefined}
                 onChange={(event) => setNumberField("depositPercent", event.target.value)}
+                onBlur={() => normalizeNumberField("depositPercent")}
               />
               <InputError id="depositPercent-error" message={errors.depositPercent} />
             </label>
