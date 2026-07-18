@@ -500,6 +500,7 @@ export function ChangeOrderGenerator({
   const documentLabelLower = documentLabel.toLowerCase();
   const isChangeOrder = input.documentType === "change-order";
   const isServiceAgreement = input.documentType === "service-agreement";
+  const hasBlankOutput = !input.provider.trim() && !input.client.trim() && !input.newRequest.trim();
   const approvalUrgency = deadlineUrgency(input.approvalDeadline);
   const exampleInput = isExampleInput(input);
   const approvalDeadlineClass =
@@ -1406,7 +1407,14 @@ export function ChangeOrderGenerator({
             ))}
           </div>
 
-          {outputMode === "document" ? (
+          {hasBlankOutput ? (
+            <div className="no-print mt-5 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--paper-soft)] p-6 text-center sm:p-8">
+              <p className="mx-auto max-w-[42ch] text-sm font-bold leading-6 text-[var(--ink-soft)]">
+                Your document appears here as you type. Start with the job basics, or load the
+                example.
+              </p>
+            </div>
+          ) : outputMode === "document" ? (
             <PrintableDocument input={input} generated={generated} />
           ) : (
             <div
