@@ -668,7 +668,9 @@ export function ChangeOrderGenerator({
       return;
     }
 
-    outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (window.matchMedia("(max-width: 1279px)").matches) {
+      outputRef.current?.scrollIntoView({ behavior: preferredScrollBehavior(), block: "start" });
+    }
     showToast(activeCopy.generatedToast);
     trackEvent(funnelEvents.changeOrderGenerated, {
       document_type: input.documentType,
@@ -1339,7 +1341,7 @@ export function ChangeOrderGenerator({
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <button type="submit" className="btn btn-primary">
               <Calculator className="h-5 w-5" aria-hidden="true" />
-              Generate
+              Check &amp; review
             </button>
             <button
               type="button"
