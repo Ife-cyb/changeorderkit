@@ -16,6 +16,8 @@ import {
 import { totalBucket } from "../src/lib/funnel";
 
 describe("change order math", () => {
+  const toCents = (value: number) => Math.round(value * 100);
+
   it("calculates labor, markup, deposit, and total", () => {
     const breakdown = calculatePrice({
       ...defaultInput,
@@ -40,6 +42,76 @@ describe("change order math", () => {
     expect(formatMoney(912.5)).toBe("$912.50");
     expect(generated.summary).toContain("Total change order amount: $912.50");
     expect(generated.paymentTerms).toContain("$456.25");
+  });
+
+  it("reconciles rounded pricing lines across seeded inputs", () => {
+    let seed = 0x5eed1234;
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0x100000000;
+    };
+
+    for (let index = 0; index < 200; index += 1) {
+      const breakdown = calculatePrice({
+        ...defaultInput,
+        laborHours: random() * 120,
+        hourlyRate: random() * 500,
+        materialsCost: random() * 25_000,
+        marginPercent: random() * 80,
+        rushPercent: random() * 100,
+        depositPercent: random() * 100
+      });
+
+      expect(
+        toCents(breakdown.labor) +
+          toCents(breakdown.materials) +
+          toCents(breakdown.marginAmount) +
+          toCents(breakdown.rushAmount)
+      ).toBe(toCents(breakdown.total));
+      expect(toCents(breakdown.depositAmount) + toCents(breakdown.balanceAmount)).toBe(
+        toCents(breakdown.total)
+      );
+    }
+  });
+
+  it("reconciles the known fractional-cent pricing cases", () => {
+    const cases = [
+      {
+        input: {
+          laborHours: 1,
+          hourlyRate: 33.33,
+          materialsCost: 0,
+          marginPercent: 0,
+          rushPercent: 0,
+          depositPercent: 50
+        },
+        formatted: ["$16.67", "$16.66", "$33.33"]
+      },
+      {
+        input: {
+          laborHours: 3,
+          hourlyRate: 45.55,
+          materialsCost: 220.13,
+          marginPercent: 25,
+          rushPercent: 0,
+          depositPercent: 50
+        },
+        formatted: ["$222.99", "$222.99", "$445.98"]
+      }
+    ];
+
+    for (const { input, formatted } of cases) {
+      const breakdown = calculatePrice({ ...defaultInput, ...input });
+
+      expect(toCents(breakdown.depositAmount) + toCents(breakdown.balanceAmount)).toBe(
+        toCents(breakdown.total)
+      );
+      expect([
+        formatMoney(breakdown.depositAmount),
+        formatMoney(breakdown.balanceAmount),
+        formatMoney(breakdown.total)
+      ]).toEqual(formatted);
+    }
   });
 });
 

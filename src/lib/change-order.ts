@@ -467,28 +467,30 @@ export const sanitizeProjectDocumentInput = sanitizeChangeOrderInput;
 export function calculatePrice(input: ProjectDocumentInput): PriceBreakdown {
   const laborHours = clampNumber(input.laborHours, 0, 10000);
   const hourlyRate = clampNumber(input.hourlyRate, 0, 100000);
-  const materials = clampNumber(input.materialsCost, 0, 100000000);
+  const materialsCost = clampNumber(input.materialsCost, 0, 100000000);
   const marginPercent = clampNumber(input.marginPercent, 0, 80);
   const rushPercent = clampNumber(input.rushPercent, 0, 100);
   const depositPercent = clampNumber(input.depositPercent, 0, 100);
 
-  const labor = laborHours * hourlyRate;
+  const cents = (value: number) => Math.round(value * 100);
+  const labor = cents(laborHours * hourlyRate);
+  const materials = cents(materialsCost);
   const subtotal = labor + materials;
-  const marginAmount = subtotal * (marginPercent / 100);
-  const rushAmount = subtotal * (rushPercent / 100);
+  const marginAmount = Math.round((subtotal * marginPercent) / 100);
+  const rushAmount = Math.round((subtotal * rushPercent) / 100);
   const total = subtotal + marginAmount + rushAmount;
-  const depositAmount = total * (depositPercent / 100);
+  const depositAmount = Math.round((total * depositPercent) / 100);
   const balanceAmount = total - depositAmount;
 
   return {
-    labor,
-    materials,
-    subtotal,
-    marginAmount,
-    rushAmount,
-    total,
-    depositAmount,
-    balanceAmount
+    labor: labor / 100,
+    materials: materials / 100,
+    subtotal: subtotal / 100,
+    marginAmount: marginAmount / 100,
+    rushAmount: rushAmount / 100,
+    total: total / 100,
+    depositAmount: depositAmount / 100,
+    balanceAmount: balanceAmount / 100
   };
 }
 
