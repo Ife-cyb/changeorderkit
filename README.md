@@ -47,7 +47,7 @@ For hosted Supabase email authentication:
 - For token-hash confirmation emails, set the confirmation template link to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`. The app also supports the standard PKCE callback route.
 - Configure custom SMTP before a public launch so confirmation and recovery email volume is not limited by the hosted trial sender.
 
-`NEXT_PUBLIC_*` values are browser-visible. The tracked `.env.production` contains only the public site URL and Supabase publishable configuration needed by Vercel builds. Keep service-role keys and every server secret in Vercel environment variables; use `.env.local` for local overrides.
+`NEXT_PUBLIC_*` values are browser-visible. Production values live in the Vercel project settings and must never be committed to git. Keep service-role keys and every server secret in Vercel environment variables; use an ignored `.env.local` file for local overrides.
 
 ## Verification
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   businessInitials,
   calculatePrice,
+  createBlankInput,
   createDefaultInput,
   deadlineUrgency,
   defaultInput,
@@ -10,12 +11,16 @@ import {
   generateChangeOrder,
   getPilotState,
   getTemplateKitState,
+  isExampleInput,
+  nextDate,
   sanitizeChangeOrderInput,
   validateChangeOrder
 } from "../src/lib/change-order";
 import { totalBucket } from "../src/lib/funnel";
 
 describe("change order math", () => {
+  const toCents = (value: number) => Math.round(value * 100);
+
   it("calculates labor, markup, deposit, and total", () => {
     const breakdown = calculatePrice({
       ...defaultInput,
@@ -41,9 +46,124 @@ describe("change order math", () => {
     expect(generated.summary).toContain("Total change order amount: $912.50");
     expect(generated.paymentTerms).toContain("$456.25");
   });
+
+  it("reconciles rounded pricing lines across seeded inputs", () => {
+    let seed = 0x5eed1234;
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0x100000000;
+    };
+
+    for (let index = 0; index < 200; index += 1) {
+      const breakdown = calculatePrice({
+        ...defaultInput,
+        laborHours: random() * 120,
+        hourlyRate: random() * 500,
+        materialsCost: random() * 25_000,
+        marginPercent: random() * 80,
+        rushPercent: random() * 100,
+        depositPercent: random() * 100
+      });
+
+      expect(
+        toCents(breakdown.labor) +
+          toCents(breakdown.materials) +
+          toCents(breakdown.marginAmount) +
+          toCents(breakdown.rushAmount)
+      ).toBe(toCents(breakdown.total));
+      expect(toCents(breakdown.depositAmount) + toCents(breakdown.balanceAmount)).toBe(
+        toCents(breakdown.total)
+      );
+    }
+  });
+
+  it("reconciles the known fractional-cent pricing cases", () => {
+    const cases = [
+      {
+        input: {
+          laborHours: 1,
+          hourlyRate: 33.33,
+          materialsCost: 0,
+          marginPercent: 0,
+          rushPercent: 0,
+          depositPercent: 50
+        },
+        formatted: ["$16.67", "$16.66", "$33.33"]
+      },
+      {
+        input: {
+          laborHours: 3,
+          hourlyRate: 45.55,
+          materialsCost: 220.13,
+          marginPercent: 25,
+          rushPercent: 0,
+          depositPercent: 50
+        },
+        formatted: ["$222.99", "$222.99", "$445.98"]
+      }
+    ];
+
+    for (const { input, formatted } of cases) {
+      const breakdown = calculatePrice({ ...defaultInput, ...input });
+
+      expect(toCents(breakdown.depositAmount) + toCents(breakdown.balanceAmount)).toBe(
+        toCents(breakdown.total)
+      );
+      expect([
+        formatMoney(breakdown.depositAmount),
+        formatMoney(breakdown.balanceAmount),
+        formatMoney(breakdown.total)
+      ]).toEqual(formatted);
+    }
+  });
 });
 
 describe("generated copy", () => {
+  it("builds default dates from the local calendar day", () => {
+    const today = new Date();
+    const expected = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
+      today.getDate()
+    ).padStart(2, "0")}`;
+
+    expect(nextDate(0)).toBe(expected);
+  });
+
+  it("creates a blank input while preserving preferences and profile defaults", () => {
+    const blank = createBlankInput(
+      {
+        businessName: "Northstar Repairs",
+        contactEmail: "jobs@northstar.example",
+        phone: "+234 800 000 0000",
+        defaultHourlyRate: 125,
+        defaultMarginPercent: 30,
+        defaultDepositPercent: 40
+      },
+      "work-order"
+    );
+
+    expect(blank.documentType).toBe("work-order");
+    expect(blank.documentTitle).toBe("");
+    expect(blank.client).toBe("");
+    expect(blank.newRequest).toBe("");
+    expect(blank.laborHours).toBe(0);
+    expect(blank.materialsCost).toBe(0);
+    expect(blank.provider).toBe("Northstar Repairs");
+    expect(blank.businessEmail).toBe("jobs@northstar.example");
+    expect(blank.hourlyRate).toBe(125);
+    expect(blank.marginPercent).toBe(30);
+    expect(blank.depositPercent).toBe(40);
+    expect(blank.approvalDeadline).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("detects examples across document types without mistaking blank or edited inputs", () => {
+    for (const documentType of ["change-order", "work-order", "service-agreement"] as const) {
+      expect(isExampleInput(createDefaultInput(undefined, documentType))).toBe(true);
+    }
+
+    expect(isExampleInput(createBlankInput())).toBe(false);
+    expect(isExampleInput({ ...createDefaultInput(), client: "A different client" })).toBe(false);
+  });
+
   it("derives stable business initials for printable branding", () => {
     expect(businessInitials("Greenline Remodeling")).toBe("GR");
     expect(businessInitials("BuildCo")).toBe("B");

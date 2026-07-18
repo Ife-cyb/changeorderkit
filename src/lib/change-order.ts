@@ -315,6 +315,48 @@ export function createDefaultInput(
   return profile ? applyBusinessProfileDefaults(base, profile) : base;
 }
 
+export function createBlankInput(
+  profile?: Partial<BusinessProfile>,
+  documentType: DocumentType = "change-order"
+): ProjectDocumentInput {
+  const base: ProjectDocumentInput = {
+    ...defaultInput,
+    documentType,
+    documentTitle: "",
+    provider: "",
+    businessEmail: "",
+    businessPhone: "",
+    client: "",
+    project: "",
+    jobLocation: "",
+    originalScope: "",
+    newRequest: "",
+    scheduleImpact: "",
+    startDate: nextDate(7),
+    endDate: nextDate(10),
+    clientResponsibilities: "",
+    exclusions: "",
+    changePolicy: "",
+    cancellationTerms: "",
+    laborHours: 0,
+    hourlyRate: 0,
+    materialsCost: 0,
+    approvalDeadline: nextDate(3)
+  };
+
+  return profile ? applyBusinessProfileDefaults(base, profile) : base;
+}
+
+export function isExampleInput(input: ProjectDocumentInput) {
+  return documentTypeOptions.some((option) => {
+    const example = createDefaultInput(undefined, option.value);
+
+    return (Object.keys(example) as Array<keyof ProjectDocumentInput>).every(
+      (field) => input[field] === example[field]
+    );
+  });
+}
+
 export function applyBusinessProfileDefaults(
   input: ProjectDocumentInput,
   profile: Partial<BusinessProfile>
@@ -346,7 +388,10 @@ export function applyBusinessProfileDefaults(
 export function nextDate(daysFromNow: number) {
   const date = new Date();
   date.setDate(date.getDate() + daysFromNow);
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function clampNumber(value: number, min: number, max: number) {
@@ -467,28 +512,30 @@ export const sanitizeProjectDocumentInput = sanitizeChangeOrderInput;
 export function calculatePrice(input: ProjectDocumentInput): PriceBreakdown {
   const laborHours = clampNumber(input.laborHours, 0, 10000);
   const hourlyRate = clampNumber(input.hourlyRate, 0, 100000);
-  const materials = clampNumber(input.materialsCost, 0, 100000000);
+  const materialsCost = clampNumber(input.materialsCost, 0, 100000000);
   const marginPercent = clampNumber(input.marginPercent, 0, 80);
   const rushPercent = clampNumber(input.rushPercent, 0, 100);
   const depositPercent = clampNumber(input.depositPercent, 0, 100);
 
-  const labor = laborHours * hourlyRate;
+  const cents = (value: number) => Math.round(value * 100);
+  const labor = cents(laborHours * hourlyRate);
+  const materials = cents(materialsCost);
   const subtotal = labor + materials;
-  const marginAmount = subtotal * (marginPercent / 100);
-  const rushAmount = subtotal * (rushPercent / 100);
+  const marginAmount = Math.round((subtotal * marginPercent) / 100);
+  const rushAmount = Math.round((subtotal * rushPercent) / 100);
   const total = subtotal + marginAmount + rushAmount;
-  const depositAmount = total * (depositPercent / 100);
+  const depositAmount = Math.round((total * depositPercent) / 100);
   const balanceAmount = total - depositAmount;
 
   return {
-    labor,
-    materials,
-    subtotal,
-    marginAmount,
-    rushAmount,
-    total,
-    depositAmount,
-    balanceAmount
+    labor: labor / 100,
+    materials: materials / 100,
+    subtotal: subtotal / 100,
+    marginAmount: marginAmount / 100,
+    rushAmount: rushAmount / 100,
+    total: total / 100,
+    depositAmount: depositAmount / 100,
+    balanceAmount: balanceAmount / 100
   };
 }
 
