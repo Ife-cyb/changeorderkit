@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/react";
 import localFont from "next/font/local";
 import Link from "next/link";
-import { signOutAction } from "@/app/actions/auth";
+import { SiteNavigation } from "@/components/site-navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import "./globals.css";
 
@@ -61,7 +61,7 @@ export default async function RootLayout({
           Skip to main content
         </a>
         <header className="app-header no-print">
-          <div className="tool-shell flex flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="tool-shell flex items-center justify-between gap-4 py-4">
             <Link href="/" className="brand-lockup" aria-label="ChangeOrderKit home">
               <span className="brand-mark" aria-hidden="true">
                 <span>CO</span>
@@ -75,50 +75,15 @@ export default async function RootLayout({
                 </span>
               </span>
             </Link>
-            <nav className="site-nav" aria-label="Primary navigation">
-              <Link className="nav-link" href="/dashboard">
-                Dashboard
-              </Link>
-              <Link className="nav-link" href="/remodeling-change-orders">
-                For remodelers
-              </Link>
-              <Link className="nav-link" href="/kit">
-                Kit
-              </Link>
-              <Link className="nav-link" href="/change-order-template">
-                Template
-              </Link>
-              <Link className="nav-link" href="/contractor-change-order-calculator">
-                Calculator
-              </Link>
-              <Link className="nav-link" href="/scope-creep-email-generator">
-                Scope email
-              </Link>
-              {isSignedIn ? (
-                <>
-                  <Link className="nav-link" href="/settings">
-                    Settings
-                  </Link>
-                  <form action={signOutAction}>
-                    <button className="nav-link" type="submit">
-                      Sign out
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <Link className="nav-link nav-link-strong" href="/sign-in">
-                  Sign in
-                </Link>
-              )}
-            </nav>
+            <SiteNavigation
+              isSignedIn={isSignedIn}
+              showUpsells={process.env.NEXT_PUBLIC_SHOW_UPSELLS === "true"}
+            />
           </div>
         </header>
         <main id="main">{children}</main>
         <footer className="app-footer no-print">
-          <div className="tool-shell flex flex-col gap-4 py-8 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <p className="max-w-[65ch] text-[var(--muted)]">
-              ChangeOrderKit creates business templates and math checks, not legal advice.
-            </p>
+          <div className="tool-shell flex justify-end py-8 text-sm">
             <div className="flex gap-4 font-bold">
               <Link href="/privacy" className="footer-link">
                 Privacy

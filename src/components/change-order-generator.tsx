@@ -48,6 +48,7 @@ type OutputMode = "document" | "email" | "invoice" | "follow-up";
 type Props = {
   pilotLink?: string;
   templateKitLink?: string;
+  showUpsells?: boolean;
   initialInput?: ChangeOrderInput;
   savedOrderId?: string;
   isSignedIn?: boolean;
@@ -57,6 +58,11 @@ type Props = {
 
 const storageKey = "changeorderkit:draft:v2";
 const documentStorageKey = "changeorderkit:draft:v3";
+
+type LocalDraftRecord = {
+  input: ChangeOrderInput;
+  savedAt: string | null;
+};
 
 const industries: Array<{ value: Industry; label: string }> = [
   { value: "remodeling", label: "Remodeling" },
@@ -134,19 +140,35 @@ const documentCopy: Record<
   }
 };
 
-function parseSavedDraft(value: string | null): ChangeOrderInput | null {
+function parseSavedDraft(value: string | null): LocalDraftRecord | null {
   if (!value) {
     return null;
   }
 
   try {
-    return sanitizeChangeOrderInput(JSON.parse(value));
+    const parsed: unknown = JSON.parse(value);
+
+    if (parsed && typeof parsed === "object" && "input" in parsed) {
+      const record = parsed as { input: unknown; savedAt?: unknown };
+
+      const savedAt = typeof record.savedAt === "string" ? record.savedAt : "";
+
+      return {
+        input: sanitizeChangeOrderInput(record.input),
+        savedAt: Number.isFinite(Date.parse(savedAt)) ? savedAt : null
+      };
+    }
+
+    return {
+      input: sanitizeChangeOrderInput(parsed),
+      savedAt: null
+    };
   } catch {
     return null;
   }
 }
 
-function readSavedDraft(): ChangeOrderInput | null {
+function readSavedDraft(): LocalDraftRecord | null {
   try {
     return parseSavedDraft(
       window.localStorage.getItem(documentStorageKey) ?? window.localStorage.getItem(storageKey)
@@ -158,9 +180,12 @@ function readSavedDraft(): ChangeOrderInput | null {
 
 function writeSavedDraft(input: ChangeOrderInput) {
   try {
-    window.localStorage.setItem(documentStorageKey, JSON.stringify(input));
+    const savedAt = new Date().toISOString();
+    window.localStorage.setItem(documentStorageKey, JSON.stringify({ input, savedAt }));
+    return savedAt;
   } catch {
     // Browsers can block storage in private or restricted modes.
+    return null;
   }
 }
 
@@ -171,6 +196,44 @@ function clearSavedDraft() {
   } catch {
     // Nothing to clear if storage is unavailable.
   }
+}
+
+function autosaveLabel(
+  savedAt: string | null,
+  now: number,
+  useLocalDraft: boolean,
+  autosaveAvailable: boolean
+) {
+  if (!useLocalDraft) {
+    return "Account record";
+  }
+
+  if (!autosaveAvailable) {
+    return "Autosave unavailable";
+  }
+
+  if (!savedAt) {
+    return "Autosave ready";
+  }
+
+  const parsedSavedAt = Date.parse(savedAt);
+
+  if (!Number.isFinite(parsedSavedAt)) {
+    return "Autosave ready";
+  }
+
+  const elapsedMinutes = Math.max(0, Math.floor((now - parsedSavedAt) / 60_000));
+
+  if (elapsedMinutes < 1) {
+    return "Autosaved just now";
+  }
+
+  if (elapsedMinutes < 60) {
+    return `Autosaved ${elapsedMinutes}m ago`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  return `Autosaved ${elapsedHours}h ago`;
 }
 
 function InputError({ id, message }: { id: string; message?: string }) {
@@ -306,11 +369,11 @@ function PrintableDocument({
               <td>{formatMoney(generated.breakdown.materials, input.currency)}</td>
             </tr>
             <tr>
-              <th scope="row">Markup/overhead</th>
+              <th scope="row">Markup + overhead allowance</th>
               <td>{formatMoney(generated.breakdown.marginAmount, input.currency)}</td>
             </tr>
             <tr>
-              <th scope="row">Rush/disruption</th>
+              <th scope="row">Rush + disruption fee</th>
               <td>{formatMoney(generated.breakdown.rushAmount, input.currency)}</td>
             </tr>
             <tr>
@@ -380,6 +443,7 @@ function PrintableDocument({
 export function ChangeOrderGenerator({
   pilotLink,
   templateKitLink,
+  showUpsells = false,
   initialInput,
   savedOrderId,
   isSignedIn = false,
@@ -394,6 +458,9 @@ export function ChangeOrderGenerator({
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [toast, setToast] = useState("");
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [autosaveAvailable, setAutosaveAvailable] = useState(true);
+  const [autosaveClock, setAutosaveClock] = useState(() => Date.now());
   const [outputMode, setOutputMode] = useState<OutputMode>("document");
   const [isSaving, startSaving] = useTransition();
   const outputRef = useRef<HTMLDivElement>(null);
@@ -426,7 +493,8 @@ export function ChangeOrderGenerator({
     const restoreId = window.setTimeout(() => {
       const fallback = createDefaultInput(businessProfile ?? undefined);
       const restored = useLocalDraft ? readSavedDraft() : null;
-      setInput(restored ?? sanitizeChangeOrderInput(initialInput ?? fallback));
+      setInput(restored?.input ?? sanitizeChangeOrderInput(initialInput ?? fallback));
+      setLastSavedAt(restored?.savedAt ?? null);
       setDraftLoaded(true);
     }, 0);
 
@@ -438,8 +506,23 @@ export function ChangeOrderGenerator({
       return;
     }
 
-    writeSavedDraft(input);
+    const saveId = window.setTimeout(() => {
+      const savedAt = writeSavedDraft(input);
+      setAutosaveAvailable(Boolean(savedAt));
+
+      if (savedAt) {
+        setLastSavedAt(savedAt);
+        setAutosaveClock(Date.now());
+      }
+    }, 400);
+
+    return () => window.clearTimeout(saveId);
   }, [draftLoaded, input, useLocalDraft]);
+
+  useEffect(() => {
+    const clockId = window.setInterval(() => setAutosaveClock(Date.now()), 30_000);
+    return () => window.clearInterval(clockId);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -653,22 +736,10 @@ export function ChangeOrderGenerator({
   }
 
   function handlePilotClick() {
-    if (!pilotState.configured) {
-      showToast("Paid pilot link not configured yet.");
-      trackEvent(funnelEvents.pilotLinkMissing);
-      return;
-    }
-
     trackEvent(funnelEvents.pilotCtaClicked, { source: "generator" });
   }
 
   function handleKitClick() {
-    if (!kitState.configured) {
-      showToast("Template kit link not configured yet.");
-      trackEvent("template_kit_link_missing");
-      return;
-    }
-
     trackEvent("template_kit_cta_clicked");
   }
 
@@ -686,7 +757,11 @@ export function ChangeOrderGenerator({
           <p className="mt-5 max-w-[65ch] text-lg leading-8 text-[var(--ink-soft)]">
             {activeCopy.dek}
           </p>
-          <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Document type">
+          <div
+            className="mt-5 grid w-full max-w-3xl grid-cols-1 gap-2 sm:grid-cols-3"
+            role="tablist"
+            aria-label="Document type"
+          >
             {documentTypeOptions.map((option) => (
               <button
                 key={option.value}
@@ -701,38 +776,43 @@ export function ChangeOrderGenerator({
             ))}
           </div>
         </div>
-        <aside className="ledger-rail no-print overflow-hidden" aria-label="Current draft status">
+        <aside
+          className="ledger-rail ledger-rail-supporting no-print overflow-hidden"
+          aria-label="Current draft status"
+        >
           <div className="p-4">
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-[color:oklch(0.77_0.04_155)]">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--accent-strong)]">
               {isSignedIn ? "Workspace enabled" : "Browser draft"}
             </p>
-            <p className="mt-2 text-sm leading-6 text-[color:oklch(0.88_0.012_115)]">
+            <p className="mt-2 text-sm leading-6 text-[var(--ink-soft)]">
               {isSignedIn
                 ? "Saved drafts and business defaults are active."
                 : "Autosaves locally. Sign in when this becomes a job record."}
             </p>
           </div>
           <div className="ledger-row">
-            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Document type</span>
-            <strong className="text-right text-sm">{documentLabel}</strong>
+            <span className="text-sm text-[var(--muted)]">Document type</span>
+            <strong className="text-right text-sm text-[var(--ink)]">{documentLabel}</strong>
           </div>
           <div className="ledger-row">
-            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Current total</span>
-            <strong className="font-mono text-sm">
+            <span className="text-sm text-[var(--muted)]">Current total</span>
+            <strong className="font-mono text-sm text-[var(--accent-strong)]">
               {formatMoney(generated.breakdown.total, input.currency)}
             </strong>
           </div>
           <div className="ledger-row">
-            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Deposit due</span>
-            <strong className="font-mono text-sm">
+            <span className="text-sm text-[var(--muted)]">Deposit due</span>
+            <strong className="font-mono text-sm text-[var(--accent-strong)]">
               {formatMoney(generated.breakdown.depositAmount, input.currency)}
             </strong>
           </div>
           <div className="ledger-row">
-            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Approval by</span>
-            <strong className="font-mono text-sm">{formatDate(input.approvalDeadline)}</strong>
+            <span className="text-sm text-[var(--muted)]">Approval by</span>
+            <strong className="font-mono text-sm text-[var(--ink)]">
+              {formatDate(input.approvalDeadline)}
+            </strong>
           </div>
-          <div className="border-t border-[color:oklch(0.48_0.02_145_/_0.42)] p-3">
+          <div className="border-t border-[var(--border)] p-3">
             {isSignedIn ? (
               <Link className="btn btn-secondary w-full" href="/dashboard">
                 <FileText className="h-5 w-5" aria-hidden="true" />
@@ -748,7 +828,7 @@ export function ChangeOrderGenerator({
         </aside>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(430px,1.08fr)]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(430px,1.08fr)] xl:items-start">
         <form className="utility-panel no-print p-4 sm:p-5" onSubmit={onGenerate} noValidate>
           <div className="form-section-title mb-5">
             <div>
@@ -758,7 +838,7 @@ export function ChangeOrderGenerator({
               </h2>
             </div>
             <span className="hidden rounded-md border border-[var(--border)] bg-[var(--paper-soft)] px-3 py-2 font-mono text-sm font-bold text-[var(--ink-soft)] sm:inline-flex">
-              Draft v3
+              {autosaveLabel(lastSavedAt, autosaveClock, useLocalDraft, autosaveAvailable)}
             </span>
           </div>
           {hasErrors ? (
@@ -896,7 +976,7 @@ export function ChangeOrderGenerator({
             </label>
           </div>
 
-          <div className="mt-5 border-t border-[var(--border)] pt-5">
+          <div className="mt-7 border-t border-[var(--border)] pt-7">
             <p className="panel-kicker mb-4">{activeCopy.scopeKicker}</p>
             <div className="grid gap-4">
             {isChangeOrder ? (
@@ -983,8 +1063,13 @@ export function ChangeOrderGenerator({
             </div>
           </div>
 
-          <div className="mt-5 border-t border-[var(--border)] pt-5">
-            <p className="panel-kicker mb-4">Pricing math</p>
+          <div className="mt-8 border-t border-[var(--border)] pt-7">
+            <div className="mb-5">
+              <p className="panel-kicker">Pricing math</p>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                Calculate the added cost separately from the scope and contact record above.
+              </p>
+            </div>
             <div className="grid gap-4 md:grid-cols-3">
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
               Extra labor hours
@@ -1035,7 +1120,7 @@ export function ChangeOrderGenerator({
             </label>
 
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Markup/overhead %
+              Markup + overhead allowance %
               <input
                 className="field-control"
                 type="number"
@@ -1045,14 +1130,21 @@ export function ChangeOrderGenerator({
                 inputMode="decimal"
                 value={input.marginPercent}
                 aria-invalid={Boolean(errors.marginPercent)}
-                aria-describedby={errors.marginPercent ? "marginPercent-error" : undefined}
+                aria-describedby={
+                  errors.marginPercent
+                    ? "marginPercent-help marginPercent-error"
+                    : "marginPercent-help"
+                }
                 onChange={(event) => setNumberField("marginPercent", event.target.value)}
               />
+              <span id="marginPercent-help" className="text-sm font-medium leading-6 text-[var(--muted)]">
+                One combined percentage applied to labor and materials and shown as one allowance.
+              </span>
               <InputError id="marginPercent-error" message={errors.marginPercent} />
             </label>
 
             <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Rush/disruption %
+              Rush + disruption fee %
               <input
                 className="field-control"
                 type="number"
@@ -1062,9 +1154,14 @@ export function ChangeOrderGenerator({
                 inputMode="decimal"
                 value={input.rushPercent}
                 aria-invalid={Boolean(errors.rushPercent)}
-                aria-describedby={errors.rushPercent ? "rushPercent-error" : undefined}
+                aria-describedby={
+                  errors.rushPercent ? "rushPercent-help rushPercent-error" : "rushPercent-help"
+                }
                 onChange={(event) => setNumberField("rushPercent", event.target.value)}
               />
+              <span id="rushPercent-help" className="text-sm font-medium leading-6 text-[var(--muted)]">
+                One combined fee for accelerated timing or disruption, itemized as a single line.
+              </span>
               <InputError id="rushPercent-error" message={errors.rushPercent} />
             </label>
 
@@ -1168,7 +1265,7 @@ export function ChangeOrderGenerator({
         </form>
 
         <section ref={outputRef} className="utility-panel print-area p-4 sm:p-5 xl:sticky xl:top-24 xl:self-start">
-          <div className="no-print mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="no-print mb-5">
             <div>
               <p className="panel-kicker">
                 <FileText className="h-4 w-4" aria-hidden="true" />
@@ -1177,11 +1274,6 @@ export function ChangeOrderGenerator({
               <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--ink)]">
                 Review, save, or send.
               </h2>
-            </div>
-            <div className="rounded-lg border border-[color:oklch(0.75_0.08_75)] bg-[var(--warning-soft)] p-3 text-sm font-semibold leading-6 text-[color:oklch(0.34_0.08_62)]">
-              {isServiceAgreement
-                ? "Service agreement starter only. Have legal terms reviewed for your location, trade, and licensing rules."
-                : "Business template only. Review your contract and local laws before using late fees, interest, liens, or legal escalation."}
             </div>
           </div>
 
@@ -1248,7 +1340,12 @@ export function ChangeOrderGenerator({
             </div>
           )}
 
-          <div className="no-print mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <p className="no-print mt-3 text-xs font-medium leading-5 text-[var(--muted)]">
+            ChangeOrderKit creates business templates and math checks, not legal advice. Review
+            contract terms and local requirements before sending.
+          </p>
+
+          <div className="no-print mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
             <button type="button" className="btn btn-primary" onClick={copyDocument}>
               <Copy className="h-5 w-5" aria-hidden="true" />
               Copy
@@ -1261,7 +1358,7 @@ export function ChangeOrderGenerator({
               <Printer className="h-5 w-5" aria-hidden="true" />
               Print / PDF
             </button>
-            {kitState.configured ? (
+            {showUpsells && kitState.configured ? (
               <a
                 className="btn btn-secondary"
                 href={kitState.href}
@@ -1272,13 +1369,8 @@ export function ChangeOrderGenerator({
                 <ExternalLink className="h-5 w-5" aria-hidden="true" />
                 Template kit
               </a>
-            ) : (
-              <button type="button" className="btn btn-disabled" onClick={handleKitClick}>
-                <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                Kit unavailable
-              </button>
-            )}
-            {pilotState.configured ? (
+            ) : null}
+            {showUpsells && pilotState.configured ? (
               <a
                 className="btn btn-secondary"
                 href={pilotState.href}
@@ -1289,12 +1381,7 @@ export function ChangeOrderGenerator({
                 <ExternalLink className="h-5 w-5" aria-hidden="true" />
                 {pilotState.label}
               </a>
-            ) : (
-              <button type="button" className="btn btn-disabled" onClick={handlePilotClick}>
-                <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                {pilotState.label}
-              </button>
-            )}
+            ) : null}
           </div>
 
           <div aria-live="polite" className="no-print mt-3 min-h-6 text-sm font-bold text-[var(--accent-strong)]">

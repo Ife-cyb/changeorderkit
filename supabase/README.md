@@ -8,6 +8,7 @@ Phase 2 uses Supabase Auth and Postgres only.
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
    - `NEXT_PUBLIC_TEMPLATE_KIT_LINK`
+   - `NEXT_PUBLIC_SHOW_UPSELLS` (set to `true` only when an upsell link is ready)
 4. Confirm the `profiles` and `change_orders` tables are exposed through the Data API for authenticated clients if your project uses the newer explicit API exposure setting.
 
 RLS is enabled on both tables and every policy is scoped to `(select auth.uid())`.

@@ -31,11 +31,12 @@ Copy `.env.example` to `.env.local` and set:
 - `NEXT_PUBLIC_PILOT_LINK`: optional interview, pilot-registration, or paid-pilot URL.
 - `NEXT_PUBLIC_PAYMENT_LINK`: temporary fallback for the pilot URL; do not describe it as an entitlement until payment verification exists.
 - `NEXT_PUBLIC_TEMPLATE_KIT_LINK`: optional Gumroad template-kit URL.
+- `NEXT_PUBLIC_SHOW_UPSELLS`: set to `true` only when the configured pilot or template-kit links should be shown.
 - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL for accounts and saved work.
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Supabase publishable key for browser/server auth.
 - `NEXT_PUBLIC_SITE_URL`: optional canonical site URL.
 
-The visitor generator works without Supabase or external links and shows clear fallback messages.
+The visitor generator works without Supabase or external links. Unconfigured upsells stay hidden instead of rendering unavailable controls.
 
 Apply every migration in `supabase/migrations` in filename order before enabling the Supabase env vars in Vercel. The auth-onboarding migration creates a profile for each confirmed or newly registered user and backfills existing accounts.
 

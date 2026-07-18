@@ -688,8 +688,8 @@ function priceLines(input: ProjectDocumentInput, breakdown: PriceBreakdown) {
   return [
     `Labor: ${formatMoney(breakdown.labor, input.currency)}`,
     `Materials and direct costs: ${formatMoney(breakdown.materials, input.currency)}`,
-    `Markup/overhead: ${formatMoney(breakdown.marginAmount, input.currency)}`,
-    `Rush/disruption: ${formatMoney(breakdown.rushAmount, input.currency)}`,
+    `Markup + overhead allowance: ${formatMoney(breakdown.marginAmount, input.currency)}`,
+    `Rush + disruption fee: ${formatMoney(breakdown.rushAmount, input.currency)}`,
     `Total: ${formatMoney(breakdown.total, input.currency)}`,
     `Deposit: ${formatMoney(breakdown.depositAmount, input.currency)}`,
     `Balance: ${formatMoney(breakdown.balanceAmount, input.currency)}`
@@ -708,8 +708,8 @@ function summaryLines(input: ProjectDocumentInput, breakdown: PriceBreakdown) {
     "Pricing:",
     `Labor: ${input.laborHours || 0} hours at ${formatMoney(input.hourlyRate || 0, input.currency)}/hour = ${formatMoney(breakdown.labor, input.currency)}`,
     `Materials and direct costs: ${formatMoney(breakdown.materials, input.currency)}`,
-    `Markup/overhead allowance: ${clampNumber(input.marginPercent, 0, 80)}% = ${formatMoney(breakdown.marginAmount, input.currency)}`,
-    `Rush/disruption fee: ${clampNumber(input.rushPercent, 0, 100)}% = ${formatMoney(breakdown.rushAmount, input.currency)}`,
+    `Markup + overhead allowance: ${clampNumber(input.marginPercent, 0, 80)}% = ${formatMoney(breakdown.marginAmount, input.currency)}`,
+    `Rush + disruption fee: ${clampNumber(input.rushPercent, 0, 100)}% = ${formatMoney(breakdown.rushAmount, input.currency)}`,
     `Total: ${formatMoney(breakdown.total, input.currency)}`,
     `Deposit required: ${clampNumber(input.depositPercent, 0, 100)}% = ${formatMoney(breakdown.depositAmount, input.currency)}`
   ];

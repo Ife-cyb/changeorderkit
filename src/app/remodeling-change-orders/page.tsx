@@ -47,6 +47,7 @@ export default function RemodelingChangeOrdersPage() {
   const pilotState = getPilotState(
     process.env.NEXT_PUBLIC_PILOT_LINK || process.env.NEXT_PUBLIC_PAYMENT_LINK
   );
+  const showUpsells = process.env.NEXT_PUBLIC_SHOW_UPSELLS === "true";
 
   return (
     <>
@@ -150,23 +151,23 @@ export default function RemodelingChangeOrdersPage() {
         </div>
       </section>
 
-      <section className="tool-shell pb-14">
-        <div className="utility-panel grid gap-6 border-teal-200 bg-teal-50/80 p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div>
-            <p className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-teal-800">
-              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
-              Paid pilot
-            </p>
-            <h2 className="mt-2 text-2xl font-black text-slate-950">
-              Help shape client approval links for remodelers.
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
-              We are validating a workflow where homeowners review the change, sign, and handle
-              the required deposit from one mobile-friendly link. The current free generator does
-              not claim to provide that capability yet.
-            </p>
-          </div>
-          {pilotState.configured ? (
+      {showUpsells && pilotState.configured ? (
+        <section className="tool-shell pb-14">
+          <div className="utility-panel grid gap-6 border-teal-200 bg-teal-50/80 p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div>
+              <p className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-teal-800">
+                <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                Paid pilot
+              </p>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">
+                Help shape client approval links for remodelers.
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
+                We are validating a workflow where homeowners review the change, sign, and handle
+                the required deposit from one mobile-friendly link. The current free generator does
+                not claim to provide that capability yet.
+              </p>
+            </div>
             <TrackedLink
               href={pilotState.href}
               className="btn btn-primary"
@@ -178,15 +179,9 @@ export default function RemodelingChangeOrdersPage() {
               <MessageSquareText className="h-5 w-5" aria-hidden="true" />
               {pilotState.label}
             </TrackedLink>
-          ) : (
-            <span className="btn btn-disabled" aria-disabled="true">
-              <MessageSquareText className="h-5 w-5" aria-hidden="true" />
-              {pilotState.label}
-            </span>
-          )}
-        </div>
-      </section>
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }
-
