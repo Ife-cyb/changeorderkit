@@ -474,6 +474,15 @@ export function ChangeOrderGenerator({
   const generated = useMemo(() => generateChangeOrder(input), [input]);
   const pilotState = getPilotState(pilotLink);
   const kitState = getTemplateKitState(templateKitLink);
+  const showKitUpsell = showUpsells && kitState.configured;
+  const showPilotUpsell = showUpsells && pilotState.configured;
+  const upsellCount = Number(showKitUpsell) + Number(showPilotUpsell);
+  const actionGridClass =
+    upsellCount === 2
+      ? "no-print mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-5"
+      : upsellCount === 1
+        ? "no-print mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        : "no-print mt-5 grid gap-3 sm:grid-cols-3";
   const hasErrors = Object.keys(errors).length > 0;
   const selectedOutput = outputText(generated, outputMode);
   const activeCopy = documentCopy[input.documentType];
@@ -1345,7 +1354,7 @@ export function ChangeOrderGenerator({
             contract terms and local requirements before sending.
           </p>
 
-          <div className="no-print mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <div className={actionGridClass}>
             <button type="button" className="btn btn-primary" onClick={copyDocument}>
               <Copy className="h-5 w-5" aria-hidden="true" />
               Copy
@@ -1358,7 +1367,7 @@ export function ChangeOrderGenerator({
               <Printer className="h-5 w-5" aria-hidden="true" />
               Print / PDF
             </button>
-            {showUpsells && kitState.configured ? (
+            {showKitUpsell ? (
               <a
                 className="btn btn-secondary"
                 href={kitState.href}
@@ -1370,7 +1379,7 @@ export function ChangeOrderGenerator({
                 Template kit
               </a>
             ) : null}
-            {showUpsells && pilotState.configured ? (
+            {showPilotUpsell ? (
               <a
                 className="btn btn-secondary"
                 href={pilotState.href}
