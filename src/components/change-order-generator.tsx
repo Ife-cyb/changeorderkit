@@ -1,60 +1,48 @@
 "use client";
 
 import {
-  AlertTriangle,
   Calculator,
-  CheckCircle2,
-  Copy,
-  Download,
-  ExternalLink,
-  FileText,
-  Mail,
-  Printer,
   RotateCcw,
   Save,
   ShieldCheck,
-  Trash2,
-  UserPlus
+  Trash2
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveChangeOrderAction } from "@/app/actions/change-orders";
+import { DraftSummaryCard } from "@/components/generator/draft-summary-card";
+import { IntakeContactFields } from "@/components/generator/intake-contact-fields";
+import {
+  IntakePricingFields,
+  type NumericField
+} from "@/components/generator/intake-pricing-fields";
+import { IntakeScopeFields } from "@/components/generator/intake-scope-fields";
+import { IntakeTermsFields } from "@/components/generator/intake-terms-fields";
+import {
+  OutputPanel,
+  type OutputMode,
+  outputFilename,
+  outputText
+} from "@/components/generator/output-panel";
 import {
   type BusinessProfile,
   type ChangeOrderInput,
   type DocumentType,
-  type GeneratedChangeOrder,
-  businessInitials,
   deadlineUrgency,
   documentTypeLabel,
   documentTypeOptions,
   createBlankInput,
   createDefaultInput,
-  formatDate,
-  formatMoney,
   generateChangeOrder,
   getPilotState,
   getTemplateKitState,
   isExampleInput,
   sanitizeChangeOrderInput,
   validateChangeOrder,
-  type Industry,
-  type PaymentTiming,
-  type Tone,
   type ValidationErrors
 } from "@/lib/change-order";
 import { funnelEvents, totalBucket } from "@/lib/funnel";
 import { trackEvent } from "@/lib/tracking";
-
-type OutputMode = "document" | "email" | "invoice" | "follow-up";
-type NumericField =
-  | "laborHours"
-  | "hourlyRate"
-  | "materialsCost"
-  | "marginPercent"
-  | "rushPercent"
-  | "depositPercent";
 
 type Props = {
   pilotLink?: string;
@@ -74,42 +62,6 @@ type LocalDraftRecord = {
   input: ChangeOrderInput;
   savedAt: string | null;
 };
-
-const industries: Array<{ value: Industry; label: string }> = [
-  { value: "remodeling", label: "Remodeling" },
-  { value: "landscaping", label: "Landscaping" },
-  { value: "handyman", label: "Handyman" },
-  { value: "web-design", label: "Web design" },
-  { value: "creative", label: "Creative services" },
-  { value: "consulting", label: "Consulting" }
-];
-
-const tones: Array<{ value: Tone; label: string }> = [
-  { value: "friendly", label: "Friendly" },
-  { value: "direct", label: "Direct" },
-  { value: "formal", label: "Formal" }
-];
-
-const paymentTimings: Array<{ value: PaymentTiming; label: string }> = [
-  { value: "deposit-before", label: "Deposit before added work begins" },
-  { value: "completion", label: "Due when added work is complete" },
-  { value: "next-invoice", label: "Add to next invoice" }
-];
-
-const currencies = [
-  { value: "USD", label: "USD — US dollar" },
-  { value: "CAD", label: "CAD — Canadian dollar" },
-  { value: "GBP", label: "GBP — British pound" },
-  { value: "AUD", label: "AUD — Australian dollar" },
-  { value: "NGN", label: "NGN — Nigerian naira" }
-] as const;
-
-const outputModes: Array<{ value: OutputMode; label: string }> = [
-  { value: "document", label: "Document" },
-  { value: "email", label: "Email" },
-  { value: "invoice", label: "Invoice note" },
-  { value: "follow-up", label: "Follow-up" }
-];
 
 const documentCopy: Record<
   DocumentType,
@@ -260,215 +212,6 @@ function printWithDocumentTitle(title: string) {
   } finally {
     document.title = previousTitle;
   }
-}
-
-function InputError({ id, message }: { id: string; message?: string }) {
-  if (!message) {
-    return null;
-  }
-
-  return (
-    <p id={id} className="flex items-start gap-1.5 text-sm font-semibold text-[var(--danger)]" role="alert">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      {message}
-    </p>
-  );
-}
-
-function outputText(generated: GeneratedChangeOrder, mode: OutputMode) {
-  if (mode === "email") {
-    return generated.clientEmail;
-  }
-
-  if (mode === "invoice") {
-    return generated.invoiceNote;
-  }
-
-  if (mode === "follow-up") {
-    return generated.followUpTemplate;
-  }
-
-  return generated.primaryDocument;
-}
-
-function documentSlug(documentType: DocumentType) {
-  return documentType;
-}
-
-function outputFilename(mode: OutputMode, documentType: DocumentType) {
-  const slug = documentSlug(documentType);
-  const names: Record<OutputMode, string> = {
-    document: `${slug}-document.txt`,
-    email: `${slug}-email.txt`,
-    invoice: `${slug}-invoice-note.txt`,
-    "follow-up": `${slug}-follow-up.txt`
-  };
-
-  return names[mode];
-}
-
-function PrintableDocument({
-  input,
-  generated
-}: {
-  input: ChangeOrderInput;
-  generated: GeneratedChangeOrder;
-}) {
-  const isChangeOrder = input.documentType === "change-order";
-  const isServiceAgreement = input.documentType === "service-agreement";
-  const label = documentTypeLabel(input.documentType);
-
-  return (
-    <div className="print-document" aria-label={`Printable ${label.toLowerCase()} document`}>
-      <header className="print-document-header">
-        <div>
-          <p className="print-kicker">{label}</p>
-          <h2>{generated.documentTitle}</h2>
-        </div>
-        <div className="print-business">
-          <span className="print-document-mark" aria-hidden="true">
-            {businessInitials(input.provider)}
-          </span>
-          <div className="print-business-copy">
-            <strong>{input.provider || "Your business"}</strong>
-            <span>{input.businessEmail || "Email not provided"}</span>
-            <span>{input.businessPhone || "Phone not provided"}</span>
-          </div>
-        </div>
-      </header>
-
-      <div className="print-meta-grid">
-        <div>
-          <span>Client</span>
-          <strong>{input.client || "Client"}</strong>
-        </div>
-        <div>
-          <span>Project</span>
-          <strong>{input.project || "Project"}</strong>
-        </div>
-        {!isChangeOrder ? (
-          <div>
-            <span>Job location</span>
-            <strong>{input.jobLocation || "Location not provided"}</strong>
-          </div>
-        ) : null}
-        <div>
-          <span>Approval deadline</span>
-          <strong>{formatDate(input.approvalDeadline)}</strong>
-        </div>
-      </div>
-
-      {isChangeOrder ? (
-        <section>
-          <h3>Original approved scope</h3>
-          <p>{input.originalScope || "Original scope not provided."}</p>
-        </section>
-      ) : null}
-
-      <section>
-        <h3>{isChangeOrder ? "Requested added work" : "Scope of work"}</h3>
-        <p>{input.newRequest || "Scope of work not provided."}</p>
-      </section>
-
-      <section>
-        <h3>{isChangeOrder ? "Schedule impact" : "Schedule"}</h3>
-        <p>
-          {input.scheduleImpact ||
-            (input.startDate || input.endDate
-              ? `${input.startDate || "Start TBD"} to ${input.endDate || "completion TBD"}`
-              : "Schedule will be confirmed after approval.")}
-        </p>
-      </section>
-
-      {!isChangeOrder ? (
-        <section>
-          <h3>Client responsibilities</h3>
-          <p>{input.clientResponsibilities || "Client responsibilities not provided."}</p>
-        </section>
-      ) : null}
-
-      <section>
-        <h3>Pricing</h3>
-        <table>
-          <tbody>
-            <tr>
-              <th scope="row">Labor</th>
-              <td>{formatMoney(generated.breakdown.labor, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Materials and direct costs</th>
-              <td>{formatMoney(generated.breakdown.materials, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Markup + overhead allowance</th>
-              <td>{formatMoney(generated.breakdown.marginAmount, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Rush + disruption fee</th>
-              <td>{formatMoney(generated.breakdown.rushAmount, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Deposit</th>
-              <td>{formatMoney(generated.breakdown.depositAmount, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Balance</th>
-              <td>{formatMoney(generated.breakdown.balanceAmount, input.currency)}</td>
-            </tr>
-          </tbody>
-        </table>
-        <dl className="total-row">
-          <dt>Total</dt>
-          <dd>{formatMoney(generated.breakdown.total, input.currency)}</dd>
-        </dl>
-      </section>
-
-      {isServiceAgreement ? (
-        <>
-          <section>
-            <h3>Changes to scope</h3>
-            <p>{input.changePolicy || "Changes must be approved in writing before scheduling."}</p>
-          </section>
-          <section>
-            <h3>Cancellation</h3>
-            <p>{input.cancellationTerms || "Cancellation terms should be reviewed before use."}</p>
-          </section>
-        </>
-      ) : null}
-
-      <section>
-        <h3>Payment terms</h3>
-        <p>{generated.paymentTerms}</p>
-      </section>
-
-      <section>
-        <h3>Scope boundary</h3>
-        <p>{input.exclusions || "No additional exclusions listed."}</p>
-        <p>{generated.approvalText}</p>
-        {isServiceAgreement ? (
-          <p>
-            This service agreement starter is a business template, not legal advice. Have legal
-            terms reviewed for your location and trade.
-          </p>
-        ) : null}
-      </section>
-
-      <section className="signature-grid">
-        <div>
-          <span>Client name</span>
-          <i />
-        </div>
-        <div>
-          <span>Signature</span>
-          <i />
-        </div>
-        <div>
-          <span>Date</span>
-          <i />
-        </div>
-      </section>
-    </div>
-  );
 }
 
 export function ChangeOrderGenerator({
@@ -871,72 +614,17 @@ export function ChangeOrderGenerator({
             ))}
           </div>
         </div>
-        <aside
-          className="ledger-rail ledger-rail-supporting no-print overflow-hidden"
-          aria-label="Current draft status"
-        >
-          <div className="p-4">
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--accent-strong)]">
-              {isSignedIn ? "Workspace enabled" : "Browser draft"}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[var(--ink-soft)]">
-              {isSignedIn
-                ? "Saved drafts and business defaults are active."
-                : "Autosaves locally. Sign in when this becomes a job record."}
-            </p>
-          </div>
-          <div className="ledger-row">
-            <span className="text-sm text-[var(--muted)]">Document type</span>
-            <strong className="text-right text-sm text-[var(--ink)]">{documentLabel}</strong>
-          </div>
-          <div className="ledger-row">
-            <span className="text-sm text-[var(--muted)]">Current total</span>
-            <div className="flex items-center justify-end gap-2">
-              {exampleInput ? (
-                <span className="rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-1 text-xs font-black uppercase tracking-[0.1em] text-[var(--accent-strong)]">
-                  Example
-                </span>
-              ) : null}
-              <strong className="font-mono text-sm text-[var(--accent-strong)]">
-                {formatMoney(generated.breakdown.total, input.currency)}
-              </strong>
-            </div>
-          </div>
-          <div className="ledger-row">
-            <span className="text-sm text-[var(--muted)]">Deposit due</span>
-            <strong className="font-mono text-sm text-[var(--accent-strong)]">
-              {formatMoney(generated.breakdown.depositAmount, input.currency)}
-            </strong>
-          </div>
-          <div className="ledger-row">
-            <span className="text-sm text-[var(--muted)]">Approval by</span>
-            <div className="text-right">
-              <strong className={`block font-mono text-sm ${approvalDeadlineClass}`}>
-                {formatDate(input.approvalDeadline)}
-              </strong>
-              {approvalUrgency !== "normal" ? (
-                <span
-                  className={`mt-1 block text-xs font-black uppercase tracking-[0.1em] ${approvalDeadlineClass}`}
-                >
-                  {approvalUrgency === "overdue" ? "Overdue" : "Due soon"}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <div className="border-t border-[var(--border)] p-3">
-            {isSignedIn ? (
-              <Link className="btn btn-secondary w-full" href="/dashboard">
-                <FileText className="h-5 w-5" aria-hidden="true" />
-                Dashboard
-              </Link>
-            ) : (
-              <Link className="btn btn-secondary w-full" href="/sign-in?next=/">
-                <UserPlus className="h-5 w-5" aria-hidden="true" />
-                Sign in to save
-              </Link>
-            )}
-          </div>
-        </aside>
+        <DraftSummaryCard
+          isSignedIn={isSignedIn}
+          documentLabel={documentLabel}
+          exampleInput={exampleInput}
+          total={generated.breakdown.total}
+          deposit={generated.breakdown.depositAmount}
+          currency={input.currency}
+          approvalDeadline={input.approvalDeadline}
+          approvalUrgency={approvalUrgency}
+          approvalDeadlineClass={approvalDeadlineClass}
+        />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(430px,1.08fr)] xl:items-start">
@@ -978,410 +666,34 @@ export function ChangeOrderGenerator({
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)] md:col-span-2">
-              Document title
-              <input
-                className="field-control"
-                value={input.documentTitle}
-                aria-invalid={Boolean(errors.documentTitle)}
-                aria-describedby={errors.documentTitle ? "documentTitle-error" : undefined}
-                ref={(node) => {
-                  firstFieldRef.current = node;
-                  registerFirstError("documentTitle", node);
-                }}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  setTextField("documentTitle", event.target.value)
-                }
-              />
-              <InputError id="documentTitle-error" message={errors.documentTitle} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Your business
-              <input
-                className="field-control"
-                value={input.provider}
-                autoComplete="organization"
-                aria-invalid={Boolean(errors.provider)}
-                aria-describedby={errors.provider ? "provider-error" : undefined}
-                ref={(node) => registerFirstError("provider", node)}
-                onChange={(event) => setTextField("provider", event.target.value)}
-              />
-              <InputError id="provider-error" message={errors.provider} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Client
-              <input
-                className="field-control"
-                value={input.client}
-                autoComplete="name"
-                aria-invalid={Boolean(errors.client)}
-                aria-describedby={errors.client ? "client-error" : undefined}
-                ref={(node) => registerFirstError("client", node)}
-                onChange={(event) => setTextField("client", event.target.value)}
-              />
-              <InputError id="client-error" message={errors.client} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Business email
-              <input
-                className="field-control"
-                value={input.businessEmail}
-                type="email"
-                autoComplete="email"
-                aria-invalid={Boolean(errors.businessEmail)}
-                aria-describedby={errors.businessEmail ? "businessEmail-error" : undefined}
-                ref={(node) => registerFirstError("businessEmail", node)}
-                onChange={(event) => setTextField("businessEmail", event.target.value)}
-              />
-              <InputError id="businessEmail-error" message={errors.businessEmail} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Business phone
-              <input
-                className="field-control"
-                value={input.businessPhone}
-                autoComplete="tel"
-                onChange={(event) => setTextField("businessPhone", event.target.value)}
-              />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Project
-              <input
-                className="field-control"
-                value={input.project}
-                onChange={(event) => setTextField("project", event.target.value)}
-              />
-            </label>
-
-            {!isChangeOrder ? (
-              <>
-                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-                  Job location
-                  <input
-                    className="field-control"
-                    value={input.jobLocation}
-                    autoComplete="street-address"
-                    onChange={(event) => setTextField("jobLocation", event.target.value)}
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-                  Start date
-                  <input
-                    className="field-control"
-                    type="date"
-                    value={input.startDate}
-                    onChange={(event) => setTextField("startDate", event.target.value)}
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-                  Completion target
-                  <input
-                    className="field-control"
-                    type="date"
-                    value={input.endDate}
-                    onChange={(event) => setTextField("endDate", event.target.value)}
-                  />
-                </label>
-              </>
-            ) : null}
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Industry
-              <select
-                className="field-control"
-                value={input.industry}
-                onChange={(event) => setTextField("industry", event.target.value as Industry)}
-              >
-                {industries.map((industry) => (
-                  <option key={industry.value} value={industry.value}>
-                    {industry.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="mt-7 border-t border-[var(--border)] pt-7">
-            <p className="panel-kicker mb-4">{activeCopy.scopeKicker}</p>
-            <div className="grid gap-4">
-            {isChangeOrder ? (
-              <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-                Original agreed scope
-                <textarea
-                  className="field-control"
-                  value={input.originalScope}
-                  aria-invalid={Boolean(errors.originalScope)}
-                  aria-describedby="originalScope-help originalScope-error"
-                  ref={(node) => registerFirstError("originalScope", node)}
-                  onChange={(event) => setTextField("originalScope", event.target.value)}
-                />
-                <span id="originalScope-help" className="text-sm font-medium text-[var(--muted)]">
-                  What was already included before the new request?
-                </span>
-                <InputError id="originalScope-error" message={errors.originalScope} />
-              </label>
-            ) : null}
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              {activeCopy.primaryScopeLabel}
-              <textarea
-                className="field-control"
-                value={input.newRequest}
-                aria-invalid={Boolean(errors.newRequest)}
-                aria-describedby="newRequest-help newRequest-error"
-                ref={(node) => registerFirstError("newRequest", node)}
-                onChange={(event) => setTextField("newRequest", event.target.value)}
-              />
-              <span id="newRequest-help" className="text-sm font-medium text-[var(--muted)]">
-                {activeCopy.primaryScopeHelp}
-              </span>
-              <InputError id="newRequest-error" message={errors.newRequest} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              {isChangeOrder ? "Schedule impact" : "Schedule notes"}
-              <textarea
-                className="field-control"
-                value={input.scheduleImpact}
-                onChange={(event) => setTextField("scheduleImpact", event.target.value)}
-              />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Exclusions and scope boundary
-              <textarea
-                className="field-control"
-                value={input.exclusions}
-                onChange={(event) => setTextField("exclusions", event.target.value)}
-              />
-            </label>
-            {!isChangeOrder ? (
-              <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-                Client responsibilities
-                <textarea
-                  className="field-control"
-                  value={input.clientResponsibilities}
-                  onChange={(event) => setTextField("clientResponsibilities", event.target.value)}
-                />
-              </label>
-            ) : null}
-            {isServiceAgreement ? (
-              <>
-                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-                  Change policy
-                  <textarea
-                    className="field-control"
-                    value={input.changePolicy}
-                    onChange={(event) => setTextField("changePolicy", event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-                  Cancellation language
-                  <textarea
-                    className="field-control"
-                    value={input.cancellationTerms}
-                    onChange={(event) => setTextField("cancellationTerms", event.target.value)}
-                  />
-                </label>
-              </>
-            ) : null}
-            </div>
-          </div>
-
-          <div className="mt-8 border-t border-[var(--border)] pt-7">
-            <div className="mb-5">
-              <p className="panel-kicker">Pricing math</p>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                Calculate the added cost separately from the scope and contact record above.
-              </p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Extra labor hours
-              <input
-                className="field-control"
-                type="number"
-                min="0"
-                step="0.25"
-                inputMode="decimal"
-                value={numberFieldValue("laborHours")}
-                aria-invalid={Boolean(errors.laborHours)}
-                aria-describedby={errors.laborHours ? "laborHours-error" : undefined}
-                onChange={(event) => setNumberField("laborHours", event.target.value)}
-                onBlur={() => normalizeNumberField("laborHours")}
-              />
-              <InputError id="laborHours-error" message={errors.laborHours} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Hourly rate
-              <input
-                className="field-control"
-                type="number"
-                min="0"
-                step="1"
-                inputMode="decimal"
-                value={numberFieldValue("hourlyRate")}
-                aria-invalid={Boolean(errors.hourlyRate)}
-                aria-describedby={errors.hourlyRate ? "hourlyRate-error" : undefined}
-                onChange={(event) => setNumberField("hourlyRate", event.target.value)}
-                onBlur={() => normalizeNumberField("hourlyRate")}
-              />
-              <InputError id="hourlyRate-error" message={errors.hourlyRate} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Materials cost
-              <input
-                className="field-control"
-                type="number"
-                min="0"
-                step="1"
-                inputMode="decimal"
-                value={numberFieldValue("materialsCost")}
-                aria-invalid={Boolean(errors.materialsCost)}
-                aria-describedby={errors.materialsCost ? "materialsCost-error" : undefined}
-                onChange={(event) => setNumberField("materialsCost", event.target.value)}
-                onBlur={() => normalizeNumberField("materialsCost")}
-              />
-              <InputError id="materialsCost-error" message={errors.materialsCost} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Markup + overhead allowance %
-              <input
-                className="field-control"
-                type="number"
-                min="0"
-                max="80"
-                step="1"
-                inputMode="decimal"
-                value={numberFieldValue("marginPercent")}
-                aria-invalid={Boolean(errors.marginPercent)}
-                aria-describedby={
-                  errors.marginPercent
-                    ? "marginPercent-help marginPercent-error"
-                    : "marginPercent-help"
-                }
-                onChange={(event) => setNumberField("marginPercent", event.target.value)}
-                onBlur={() => normalizeNumberField("marginPercent")}
-              />
-              <span id="marginPercent-help" className="text-sm font-medium leading-6 text-[var(--muted)]">
-                One combined percentage applied to labor and materials and shown as one allowance.
-              </span>
-              <InputError id="marginPercent-error" message={errors.marginPercent} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Rush + disruption fee %
-              <input
-                className="field-control"
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                inputMode="decimal"
-                value={numberFieldValue("rushPercent")}
-                aria-invalid={Boolean(errors.rushPercent)}
-                aria-describedby={
-                  errors.rushPercent ? "rushPercent-help rushPercent-error" : "rushPercent-help"
-                }
-                onChange={(event) => setNumberField("rushPercent", event.target.value)}
-                onBlur={() => normalizeNumberField("rushPercent")}
-              />
-              <span id="rushPercent-help" className="text-sm font-medium leading-6 text-[var(--muted)]">
-                One combined fee for accelerated timing or disruption, itemized as a single line.
-              </span>
-              <InputError id="rushPercent-error" message={errors.rushPercent} />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Deposit %
-              <input
-                className="field-control"
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                inputMode="decimal"
-                value={numberFieldValue("depositPercent")}
-                aria-invalid={Boolean(errors.depositPercent)}
-                aria-describedby={errors.depositPercent ? "depositPercent-error" : undefined}
-                onChange={(event) => setNumberField("depositPercent", event.target.value)}
-                onBlur={() => normalizeNumberField("depositPercent")}
-              />
-              <InputError id="depositPercent-error" message={errors.depositPercent} />
-            </label>
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-4 border-t border-[var(--border)] pt-5 md:grid-cols-4">
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Payment timing
-              <select
-                className="field-control"
-                value={input.paymentTiming}
-                onChange={(event) =>
-                  setTextField("paymentTiming", event.target.value as PaymentTiming)
-                }
-              >
-                {paymentTimings.map((timing) => (
-                  <option key={timing.value} value={timing.value}>
-                    {timing.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Approval deadline
-              <input
-                className="field-control"
-                type="date"
-                value={input.approvalDeadline}
-                onChange={(event) => setTextField("approvalDeadline", event.target.value)}
-              />
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Email tone
-              <select
-                className="field-control"
-                value={input.tone}
-                onChange={(event) => setTextField("tone", event.target.value as Tone)}
-              >
-                {tones.map((tone) => (
-                  <option key={tone.value} value={tone.value}>
-                    {tone.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Currency
-              <select
-                className="field-control"
-                value={input.currency}
-                onChange={(event) => setTextField("currency", event.target.value)}
-              >
-                {currencies.map((currency) => (
-                  <option key={currency.value} value={currency.value}>
-                    {currency.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
+          <IntakeContactFields
+            input={input}
+            errors={errors}
+            isChangeOrder={isChangeOrder}
+            setTextField={setTextField}
+            registerFirstError={registerFirstError}
+            setFirstField={(node) => {
+              firstFieldRef.current = node;
+            }}
+          />
+          <IntakeScopeFields
+            input={input}
+            errors={errors}
+            isChangeOrder={isChangeOrder}
+            isServiceAgreement={isServiceAgreement}
+            scopeKicker={activeCopy.scopeKicker}
+            primaryScopeLabel={activeCopy.primaryScopeLabel}
+            primaryScopeHelp={activeCopy.primaryScopeHelp}
+            setTextField={setTextField}
+            registerFirstError={registerFirstError}
+          />
+          <IntakePricingFields
+            errors={errors}
+            numberFieldValue={numberFieldValue}
+            setNumberField={setNumberField}
+            normalizeNumberField={normalizeNumberField}
+          />
+          <IntakeTermsFields input={input} setTextField={setTextField} />
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <button type="submit" className="btn btn-primary">
               <Calculator className="h-5 w-5" aria-hidden="true" />
@@ -1411,152 +723,28 @@ export function ChangeOrderGenerator({
           </div>
         </form>
 
-        <section ref={outputRef} className="utility-panel print-area p-4 sm:p-5 xl:sticky xl:top-24 xl:self-start">
-          <div className="no-print mb-5">
-            <div>
-              <p className="panel-kicker">
-                <FileText className="h-4 w-4" aria-hidden="true" />
-                Client-ready output
-              </p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--ink)]">
-                Review, save, or send.
-              </h2>
-            </div>
-          </div>
-
-          <div className="no-print grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                Labor
-              </span>
-              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
-                {formatMoney(generated.breakdown.labor, input.currency)}
-              </strong>
-            </div>
-            <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                Materials
-              </span>
-              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
-                {formatMoney(generated.breakdown.materials, input.currency)}
-              </strong>
-            </div>
-            <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                Deposit
-              </span>
-              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
-                {formatMoney(generated.breakdown.depositAmount, input.currency)}
-              </strong>
-            </div>
-            <div className="metric-box metric-box-total">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                Total
-              </span>
-              <strong className="mt-2 block font-mono text-3xl text-[var(--accent-strong)] sm:text-4xl">
-                {formatMoney(generated.breakdown.total, input.currency)}
-              </strong>
-            </div>
-          </div>
-
-          <div className="no-print mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Output type">
-            {outputModes.map((mode) => (
-              <button
-                key={mode.value}
-                type="button"
-                className={outputMode === mode.value ? "segment segment-active" : "segment"}
-                onClick={() => setOutputMode(mode.value)}
-                role="tab"
-                aria-selected={outputMode === mode.value}
-              >
-                {mode.value === "email" ? <Mail className="h-4 w-4" aria-hidden="true" /> : null}
-                {mode.label}
-              </button>
-            ))}
-          </div>
-
-          {hasBlankOutput ? (
-            <div className="no-print mt-5 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--paper-soft)] p-6 text-center sm:p-8">
-              <p className="mx-auto max-w-[42ch] text-sm font-bold leading-6 text-[var(--ink-soft)]">
-                Your document appears here as you type. Start with the job basics, or load the
-                example.
-              </p>
-            </div>
-          ) : outputMode === "document" ? (
-            <PrintableDocument input={input} generated={generated} />
-          ) : (
-            <div
-              className="document-preview mt-5"
-              tabIndex={0}
-              aria-label={`Generated ${documentLabelLower} output`}
-            >
-              {selectedOutput}
-            </div>
-          )}
-
-          <p className="no-print mt-3 text-xs font-medium leading-5 text-[var(--muted)]">
-            ChangeOrderKit creates business templates and math checks, not legal advice. Review
-            contract terms and local requirements before sending.
-          </p>
-
-          <div className={actionGridClass}>
-            <button type="button" className="btn btn-secondary" onClick={copyDocument}>
-              <Copy className="h-5 w-5" aria-hidden="true" />
-              Copy
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={downloadText}>
-              <Download className="h-5 w-5" aria-hidden="true" />
-              Download text
-            </button>
-            <button type="button" className="btn btn-primary" onClick={printDocument}>
-              <Printer className="h-5 w-5" aria-hidden="true" />
-              Print / PDF
-            </button>
-            {showKitUpsell ? (
-              <a
-                className="btn btn-secondary"
-                href={kitState.href}
-                target="_blank"
-                rel="noreferrer"
-                onClick={handleKitClick}
-              >
-                <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                Template kit
-              </a>
-            ) : null}
-            {showPilotUpsell ? (
-              <a
-                className="btn btn-secondary"
-                href={pilotState.href}
-                target="_blank"
-                rel="noreferrer"
-                onClick={handlePilotClick}
-              >
-                <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                {pilotState.label}
-              </a>
-            ) : null}
-          </div>
-
-          <div aria-live="polite" className="no-print mt-3 min-h-6 text-sm font-bold text-[var(--accent-strong)]">
-            {toast}
-          </div>
-
-          <div className="no-print mt-5 border-t border-[var(--border)] pt-5">
-            <h3 className="flex items-center gap-2 text-base font-black text-[var(--ink)]">
-              <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" aria-hidden="true" />
-              Before sending
-            </h3>
-            <ul className="mt-3 grid gap-2 text-sm leading-6 text-[var(--ink-soft)]">
-              {generated.checklist.map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
+        <OutputPanel
+          outputRef={outputRef}
+          input={input}
+          generated={generated}
+          outputMode={outputMode}
+          setOutputMode={setOutputMode}
+          hasBlankOutput={hasBlankOutput}
+          selectedOutput={selectedOutput}
+          documentLabelLower={documentLabelLower}
+          actionGridClass={actionGridClass}
+          copyDocument={copyDocument}
+          downloadText={downloadText}
+          printDocument={printDocument}
+          showKitUpsell={showKitUpsell}
+          kitHref={kitState.href}
+          handleKitClick={handleKitClick}
+          showPilotUpsell={showPilotUpsell}
+          pilotHref={pilotState.href}
+          pilotLabel={pilotState.label}
+          handlePilotClick={handlePilotClick}
+          toast={toast}
+        />
       </div>
     </section>
   );
