@@ -240,6 +240,10 @@ function autosaveLabel(
   return `Autosaved ${elapsedHours}h ago`;
 }
 
+function preferredScrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
 function InputError({ id, message }: { id: string; message?: string }) {
   if (!message) {
     return null;
@@ -472,6 +476,7 @@ export function ChangeOrderGenerator({
   const [autosaveClock, setAutosaveClock] = useState(() => Date.now());
   const [outputMode, setOutputMode] = useState<OutputMode>("document");
   const [isSaving, startSaving] = useTransition();
+  const intakeRef = useRef<HTMLFormElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const toastTimerRef = useRef<number | null>(null);
@@ -577,6 +582,12 @@ export function ChangeOrderGenerator({
       trackEvent(funnelEvents.formStarted, { document_type: input.documentType });
       startedTrackedRef.current = true;
     }
+  }
+
+  function startDocument() {
+    trackFormStarted();
+    intakeRef.current?.scrollIntoView({ behavior: preferredScrollBehavior(), block: "start" });
+    window.setTimeout(() => firstFieldRef.current?.focus({ preventScroll: true }), 300);
   }
 
   function setTextField(field: keyof ChangeOrderInput, value: string) {
@@ -782,8 +793,8 @@ export function ChangeOrderGenerator({
   }
 
   return (
-    <section id="generator" className="tool-shell scroll-mt-6 py-7 sm:py-10" aria-label="Document generator">
-      <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.45fr)] lg:items-end">
+    <section id="generator" className="tool-shell scroll-mt-6 py-5 sm:py-10" aria-label="Document generator">
+      <div className="mb-4 grid gap-4 sm:mb-6 sm:gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.45fr)] lg:items-end">
         <div>
           <p className="panel-kicker mb-3">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
@@ -792,12 +803,18 @@ export function ChangeOrderGenerator({
           <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight text-[var(--ink)] sm:text-5xl lg:text-7xl">
             {activeCopy.hero}
           </h1>
-          <p className="mt-5 max-w-[65ch] text-lg leading-8 text-[var(--ink-soft)]">
+          <p className="mt-3 max-w-[65ch] text-lg leading-8 text-[var(--ink-soft)] sm:mt-5">
             {activeCopy.dek}
           </p>
+          <button type="button" className="btn btn-primary mt-4" onClick={startDocument}>
+            Start your {documentLabelLower}
+          </button>
+          <p className="mt-4 text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)] sm:mt-5">
+            Document type
+          </p>
           <div
-            className="mt-5 grid w-full max-w-3xl grid-cols-1 gap-2 sm:grid-cols-3"
-            role="tablist"
+            className="mt-2 grid w-full max-w-3xl grid-cols-1 gap-2 sm:grid-cols-3"
+            role="radiogroup"
             aria-label="Document type"
           >
             {documentTypeOptions.map((option) => (
@@ -806,8 +823,8 @@ export function ChangeOrderGenerator({
                 type="button"
                 className={input.documentType === option.value ? "segment segment-active" : "segment"}
                 onClick={() => setDocumentType(option.value)}
-                role="tab"
-                aria-selected={input.documentType === option.value}
+                role="radio"
+                aria-checked={input.documentType === option.value}
               >
                 {option.label}
               </button>
@@ -883,7 +900,12 @@ export function ChangeOrderGenerator({
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(430px,1.08fr)] xl:items-start">
-        <form className="utility-panel no-print p-4 sm:p-5" onSubmit={onGenerate} noValidate>
+        <form
+          ref={intakeRef}
+          className="utility-panel no-print scroll-mt-6 p-4 sm:p-5"
+          onSubmit={onGenerate}
+          noValidate
+        >
           <div className="form-section-title mb-5">
             <div>
               <p className="panel-kicker">Scope intake</p>
