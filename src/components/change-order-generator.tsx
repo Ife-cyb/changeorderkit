@@ -24,6 +24,8 @@ import {
   type ChangeOrderInput,
   type DocumentType,
   type GeneratedChangeOrder,
+  businessInitials,
+  deadlineUrgency,
   documentTypeLabel,
   documentTypeOptions,
   createDefaultInput,
@@ -300,9 +302,14 @@ function PrintableDocument({
           <h2>{generated.documentTitle}</h2>
         </div>
         <div className="print-business">
-          <strong>{input.provider || "Your business"}</strong>
-          <span>{input.businessEmail || "Email not provided"}</span>
-          <span>{input.businessPhone || "Phone not provided"}</span>
+          <span className="print-document-mark" aria-hidden="true">
+            {businessInitials(input.provider)}
+          </span>
+          <div className="print-business-copy">
+            <strong>{input.provider || "Your business"}</strong>
+            <span>{input.businessEmail || "Email not provided"}</span>
+            <span>{input.businessPhone || "Phone not provided"}</span>
+          </div>
         </div>
       </header>
 
@@ -384,12 +391,12 @@ function PrintableDocument({
               <th scope="row">Balance</th>
               <td>{formatMoney(generated.breakdown.balanceAmount, input.currency)}</td>
             </tr>
-            <tr className="total-row">
-              <th scope="row">Total</th>
-              <td>{formatMoney(generated.breakdown.total, input.currency)}</td>
-            </tr>
           </tbody>
         </table>
+        <dl className="total-row">
+          <dt>Total</dt>
+          <dd>{formatMoney(generated.breakdown.total, input.currency)}</dd>
+        </dl>
       </section>
 
       {isServiceAgreement ? (
@@ -490,6 +497,13 @@ export function ChangeOrderGenerator({
   const documentLabelLower = documentLabel.toLowerCase();
   const isChangeOrder = input.documentType === "change-order";
   const isServiceAgreement = input.documentType === "service-agreement";
+  const approvalUrgency = deadlineUrgency(input.approvalDeadline);
+  const approvalDeadlineClass =
+    approvalUrgency === "overdue"
+      ? "text-[var(--danger)]"
+      : approvalUrgency === "soon"
+        ? "text-[var(--warning)]"
+        : "text-[var(--ink)]";
 
   useEffect(() => {
     if (!viewedTrackedRef.current) {
@@ -817,9 +831,18 @@ export function ChangeOrderGenerator({
           </div>
           <div className="ledger-row">
             <span className="text-sm text-[var(--muted)]">Approval by</span>
-            <strong className="font-mono text-sm text-[var(--ink)]">
-              {formatDate(input.approvalDeadline)}
-            </strong>
+            <div className="text-right">
+              <strong className={`block font-mono text-sm ${approvalDeadlineClass}`}>
+                {formatDate(input.approvalDeadline)}
+              </strong>
+              {approvalUrgency !== "normal" ? (
+                <span
+                  className={`mt-1 block text-xs font-black uppercase tracking-[0.1em] ${approvalDeadlineClass}`}
+                >
+                  {approvalUrgency === "overdue" ? "Overdue" : "Due soon"}
+                </span>
+              ) : null}
+            </div>
           </div>
           <div className="border-t border-[var(--border)] p-3">
             {isSignedIn ? (
@@ -1311,11 +1334,11 @@ export function ChangeOrderGenerator({
                 {formatMoney(generated.breakdown.depositAmount, input.currency)}
               </strong>
             </div>
-            <div className="metric-box">
+            <div className="metric-box metric-box-total">
               <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
                 Total
               </span>
-              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
+              <strong className="mt-2 block font-mono text-3xl text-[var(--accent-strong)] sm:text-4xl">
                 {formatMoney(generated.breakdown.total, input.currency)}
               </strong>
             </div>

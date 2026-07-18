@@ -533,6 +533,11 @@ textarea.field-control {
   border-left: 3px solid var(--accent);
 }
 
+.metric-box-total {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+
 .document-preview {
   max-height: 700px;
   overflow: auto;
@@ -553,6 +558,7 @@ textarea.field-control {
   border: 1px solid oklch(0.72 0.02 125);
   border-radius: 8px;
   background: var(--paper);
+  box-shadow: var(--shadow-ledge);
   color: var(--ink);
   padding: clamp(1rem, 2.5vw, 2rem);
 }
@@ -582,13 +588,36 @@ textarea.field-control {
 }
 
 .print-business {
-  display: grid;
-  gap: 0.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   color: var(--muted);
   font-size: 0.92rem;
 }
 
-.print-business strong {
+.print-document-mark {
+  display: grid;
+  height: 42px;
+  width: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border: 1px solid var(--accent-strong);
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--paper);
+  font-size: 0.8rem;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow-press);
+  print-color-adjust: exact;
+}
+
+.print-business-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.print-business-copy strong {
   color: var(--ink);
   font-size: 1.05rem;
 }
@@ -658,11 +687,34 @@ textarea.field-control {
   font-family: var(--font-mono);
 }
 
-.print-document .total-row th,
-.print-document .total-row td {
-  color: var(--ink);
-  font-size: 1.05rem;
+.print-document .total-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 1rem;
+  margin-top: 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  padding: 0.9rem 1rem;
+}
+
+.print-document .total-row dt {
+  color: var(--accent-strong);
+  font-size: 0.78rem;
   font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.print-document .total-row dd {
+  margin: 0;
+  color: var(--accent-strong);
+  font-family: var(--font-mono);
+  font-size: clamp(1.65rem, 3vw, 2.25rem);
+  font-weight: 950;
+  line-height: 1;
+  text-align: right;
 }
 
 .signature-grid {
@@ -727,6 +779,7 @@ textarea.field-control {
   }
 
   .print-business {
+    justify-content: flex-end;
     text-align: right;
   }
 
@@ -788,7 +841,18 @@ textarea.field-control {
     margin: 0;
     border: 0;
     border-radius: 0;
+    box-shadow: none;
     padding: 0;
+  }
+
+  .print-document-mark,
+  .print-document .total-row {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-document-mark {
+    box-shadow: none;
   }
 }
 

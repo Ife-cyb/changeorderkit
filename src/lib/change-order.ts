@@ -14,6 +14,7 @@ export type DocumentType = "change-order" | "work-order" | "service-agreement";
 
 export type ProjectDocumentStatus = "draft" | "ready" | "archived";
 export type ChangeOrderStatus = ProjectDocumentStatus;
+export type DeadlineUrgency = "overdue" | "soon" | "normal";
 
 export type ProjectDocumentInput = {
   documentType: DocumentType;
@@ -232,6 +233,66 @@ function documentDefaults(documentType: DocumentType): Partial<ProjectDocumentIn
 
 export function documentTypeLabel(documentType: DocumentType) {
   return documentTypeOptions.find((option) => option.value === documentType)?.label ?? "Document";
+}
+
+export function businessInitials(provider?: string | null) {
+  const words = provider?.match(/[\p{L}\p{N}]+/gu) ?? [];
+
+  if (words.length === 0) {
+    return "—";
+  }
+
+  return words
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toLocaleUpperCase("en-US");
+}
+
+function utcCalendarDay(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const parsed = new Date(timestamp);
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return Math.floor(timestamp / 86_400_000);
+}
+
+export function deadlineUrgency(dateString: string, referenceDate: Date = new Date()): DeadlineUrgency {
+  const targetDay = utcCalendarDay(dateString);
+
+  if (targetDay === null || !Number.isFinite(referenceDate.getTime())) {
+    return "normal";
+  }
+
+  const referenceDay = utcCalendarDay(referenceDate.toISOString().slice(0, 10));
+
+  if (referenceDay === null) {
+    return "normal";
+  }
+
+  const daysUntilDeadline = targetDay - referenceDay;
+
+  if (daysUntilDeadline < 0) {
+    return "overdue";
+  }
+
+  return daysUntilDeadline <= 3 ? "soon" : "normal";
 }
 
 export function sanitizeDocumentType(value: unknown, fallback: DocumentType = "change-order"): DocumentType {

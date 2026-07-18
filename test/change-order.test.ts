@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  businessInitials,
   calculatePrice,
   createDefaultInput,
+  deadlineUrgency,
   defaultInput,
   documentTypeLabel,
   formatMoney,
@@ -42,6 +44,23 @@ describe("change order math", () => {
 });
 
 describe("generated copy", () => {
+  it("derives stable business initials for printable branding", () => {
+    expect(businessInitials("Greenline Remodeling")).toBe("GR");
+    expect(businessInitials("BuildCo")).toBe("B");
+    expect(businessInitials("  A & B Services  ")).toBe("AB");
+    expect(businessInitials("")).toBe("—");
+  });
+
+  it("classifies approval deadline urgency by calendar day", () => {
+    const referenceDate = new Date("2026-07-18T12:00:00.000Z");
+
+    expect(deadlineUrgency("2026-07-17", referenceDate)).toBe("overdue");
+    expect(deadlineUrgency("2026-07-18", referenceDate)).toBe("soon");
+    expect(deadlineUrgency("2026-07-21", referenceDate)).toBe("soon");
+    expect(deadlineUrgency("2026-07-22", referenceDate)).toBe("normal");
+    expect(deadlineUrgency("not-a-date", referenceDate)).toBe("normal");
+  });
+
   it("includes approval and scope protection language", () => {
     const input = createDefaultInput();
     const generated = generateChangeOrder(input);
