@@ -7,6 +7,8 @@ export const funnelEvents = {
   changeOrderDownloaded: "change_order_downloaded",
   changeOrderPrinted: "change_order_printed",
   draftReset: "draft_reset",
+  exampleCleared: "example_cleared",
+  formCleared: "form_cleared",
   pilotCtaClicked: "pilot_cta_clicked",
   pilotLinkMissing: "pilot_link_missing",
   remodelingLandingCtaClicked: "remodeling_landing_cta_clicked"
@@ -33,4 +35,3 @@ export function totalBucket(total: number) {
 
   return "5000+";
 }
-

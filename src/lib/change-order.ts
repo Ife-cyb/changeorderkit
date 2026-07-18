@@ -315,6 +315,48 @@ export function createDefaultInput(
   return profile ? applyBusinessProfileDefaults(base, profile) : base;
 }
 
+export function createBlankInput(
+  profile?: Partial<BusinessProfile>,
+  documentType: DocumentType = "change-order"
+): ProjectDocumentInput {
+  const base: ProjectDocumentInput = {
+    ...defaultInput,
+    documentType,
+    documentTitle: "",
+    provider: "",
+    businessEmail: "",
+    businessPhone: "",
+    client: "",
+    project: "",
+    jobLocation: "",
+    originalScope: "",
+    newRequest: "",
+    scheduleImpact: "",
+    startDate: nextDate(7),
+    endDate: nextDate(10),
+    clientResponsibilities: "",
+    exclusions: "",
+    changePolicy: "",
+    cancellationTerms: "",
+    laborHours: 0,
+    hourlyRate: 0,
+    materialsCost: 0,
+    approvalDeadline: nextDate(3)
+  };
+
+  return profile ? applyBusinessProfileDefaults(base, profile) : base;
+}
+
+export function isExampleInput(input: ProjectDocumentInput) {
+  return documentTypeOptions.some((option) => {
+    const example = createDefaultInput(undefined, option.value);
+
+    return (Object.keys(example) as Array<keyof ProjectDocumentInput>).every(
+      (field) => input[field] === example[field]
+    );
+  });
+}
+
 export function applyBusinessProfileDefaults(
   input: ProjectDocumentInput,
   profile: Partial<BusinessProfile>

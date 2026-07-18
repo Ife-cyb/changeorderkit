@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Save,
   ShieldCheck,
+  Trash2,
   UserPlus
 } from "lucide-react";
 import Link from "next/link";
@@ -28,13 +29,14 @@ import {
   deadlineUrgency,
   documentTypeLabel,
   documentTypeOptions,
+  createBlankInput,
   createDefaultInput,
-  defaultInput,
   formatDate,
   formatMoney,
   generateChangeOrder,
   getPilotState,
   getTemplateKitState,
+  isExampleInput,
   sanitizeChangeOrderInput,
   validateChangeOrder,
   type Industry,
@@ -459,7 +461,7 @@ export function ChangeOrderGenerator({
 }: Props) {
   const router = useRouter();
   const [input, setInput] = useState<ChangeOrderInput>(() =>
-    sanitizeChangeOrderInput(initialInput ?? defaultInput)
+    sanitizeChangeOrderInput(initialInput ?? createDefaultInput(businessProfile ?? undefined))
   );
   const [currentOrderId, setCurrentOrderId] = useState(savedOrderId ?? "");
   const [errors, setErrors] = useState<ValidationErrors>({});
@@ -471,6 +473,7 @@ export function ChangeOrderGenerator({
   const [outputMode, setOutputMode] = useState<OutputMode>("document");
   const [isSaving, startSaving] = useTransition();
   const outputRef = useRef<HTMLDivElement>(null);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
   const toastTimerRef = useRef<number | null>(null);
   const viewedTrackedRef = useRef(false);
   const startedTrackedRef = useRef(false);
@@ -498,6 +501,7 @@ export function ChangeOrderGenerator({
   const isChangeOrder = input.documentType === "change-order";
   const isServiceAgreement = input.documentType === "service-agreement";
   const approvalUrgency = deadlineUrgency(input.approvalDeadline);
+  const exampleInput = isExampleInput(input);
   const approvalDeadlineClass =
     approvalUrgency === "overdue"
       ? "text-[var(--danger)]"
@@ -758,6 +762,16 @@ export function ChangeOrderGenerator({
     trackEvent(funnelEvents.draftReset);
   }
 
+  function clearToBlank(eventName: "example_cleared" | "form_cleared", message: string) {
+    clearSavedDraft();
+    setInput(createBlankInput(businessProfile ?? undefined, input.documentType));
+    setErrors({});
+    setLastSavedAt(null);
+    showToast(message);
+    trackEvent(eventName, { document_type: input.documentType });
+    window.setTimeout(() => firstFieldRef.current?.focus(), 0);
+  }
+
   function handlePilotClick() {
     trackEvent(funnelEvents.pilotCtaClicked, { source: "generator" });
   }
@@ -819,9 +833,16 @@ export function ChangeOrderGenerator({
           </div>
           <div className="ledger-row">
             <span className="text-sm text-[var(--muted)]">Current total</span>
-            <strong className="font-mono text-sm text-[var(--accent-strong)]">
-              {formatMoney(generated.breakdown.total, input.currency)}
-            </strong>
+            <div className="flex items-center justify-end gap-2">
+              {exampleInput ? (
+                <span className="rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-1 text-xs font-black uppercase tracking-[0.1em] text-[var(--accent-strong)]">
+                  Example
+                </span>
+              ) : null}
+              <strong className="font-mono text-sm text-[var(--accent-strong)]">
+                {formatMoney(generated.breakdown.total, input.currency)}
+              </strong>
+            </div>
           </div>
           <div className="ledger-row">
             <span className="text-sm text-[var(--muted)]">Deposit due</span>
@@ -873,6 +894,20 @@ export function ChangeOrderGenerator({
               {autosaveLabel(lastSavedAt, autosaveClock, useLocalDraft, autosaveAvailable)}
             </span>
           </div>
+          {exampleInput ? (
+            <div className="mb-5 flex flex-col gap-3 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] p-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-bold text-[var(--accent-strong)]">
+                You&apos;re viewing an example job.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary shrink-0"
+                onClick={() => clearToBlank(funnelEvents.exampleCleared, "Ready for your job details.")}
+              >
+                Use my own job
+              </button>
+            </div>
+          ) : null}
           {hasErrors ? (
             <div className="mb-5 rounded-lg border border-[color:oklch(0.72_0.08_25)] bg-[var(--danger-soft)] p-3 text-sm font-semibold text-[var(--danger)]">
               Review the highlighted fields. The document is easier to defend when the scope
@@ -888,7 +923,10 @@ export function ChangeOrderGenerator({
                 value={input.documentTitle}
                 aria-invalid={Boolean(errors.documentTitle)}
                 aria-describedby={errors.documentTitle ? "documentTitle-error" : undefined}
-                ref={(node) => registerFirstError("documentTitle", node)}
+                ref={(node) => {
+                  firstFieldRef.current = node;
+                  registerFirstError("documentTitle", node);
+                }}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   setTextField("documentTitle", event.target.value)
                 }
@@ -1275,7 +1313,7 @@ export function ChangeOrderGenerator({
             </label>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <button type="submit" className="btn btn-primary">
               <Calculator className="h-5 w-5" aria-hidden="true" />
               Generate
@@ -1292,6 +1330,14 @@ export function ChangeOrderGenerator({
             <button type="button" className="btn btn-secondary" onClick={resetDraft}>
               <RotateCcw className="h-5 w-5" aria-hidden="true" />
               Load example
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => clearToBlank(funnelEvents.formCleared, "Form cleared.")}
+            >
+              <Trash2 className="h-5 w-5" aria-hidden="true" />
+              Clear form
             </button>
           </div>
         </form>
