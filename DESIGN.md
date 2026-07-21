@@ -87,6 +87,11 @@ Shadows are tinted toward the green-neutral background. No pure-black drop shado
 - `optional-disclosure` for non-blocking contact, schedule, safeguard, and pricing adjustments
 - `pricing-live-strip` for the immediate price “aha” moment
 - `print-document`
+- `landing-hero` and `landing-artifact`: split conversion hero using the real printable output
+- `landing-proof-list`: compact access and output facts below the hero
+- `landing-process`: divided workflow rows with numbered outcomes
+- `landing-deliverables`: dark ledger rail for the four concrete outputs
+- `landing-faq-list`: native disclosure rows with no client-side accordion dependency
 
 ## Project-Specific Bans
 
@@ -102,6 +107,17 @@ Shadows are tinted toward the green-neutral background. No pure-black drop shado
 - Banned: elevate, seamless, unleash, next-gen, game-changing
 - Button labels: specific verbs such as "Save defaults", "New change order", "Print / PDF"
 
+## Landing Page System
+
+- Lead with the contractor outcome, then show the actual `PrintableDocument` as the product visual.
+- The homepage remains conversion-oriented without inventing testimonials, customer counts, logos, or payment capabilities.
+- Primary CTAs scroll to the working generator and use `home_landing_cta_clicked` with placement metadata.
+- Proof points must describe currently shipped behavior: no account to generate, browser draft autosave, free output, and print/PDF.
+- Use asymmetric sections, shared ledgers, and divided rows instead of equal feature-card grids.
+- Keep the landing layer server-rendered apart from the existing tracked-link leaf and generator client application.
+- Landing-page motion is intentionally quieter than the product-wide dial: tactile control transitions only, with no load animation or scroll listener.
+- The global footer uses four responsive columns on desktop and keeps Product, Resources, and Legal navigation visible on every route.
+
 ## Accessibility Floor
 
 - WCAG 2.2 AA contrast for body copy
@@ -114,3 +130,4 @@ Shadows are tinted toward the green-neutral background. No pure-black drop shado
 
 - 2026-07-08 by frontend-god-mode redesign: established industrial premium workspace tokens, ledger rail pattern, dashboard rows, auth redesign, and SEO/support page system.
 - 2026-07-21 by guided form UX refinement: ordered the generator around Job → Scope → Price → Approval, added progressive disclosure, live readiness, blank/example onboarding, inline recovery, and a mobile-first handoff.
+- 2026-07-21 by frontend-god-mode landing build: added the real-output conversion hero, proof band, workflow rows, deliverable rail, FAQ system, tracked homepage CTA, and full site footer.

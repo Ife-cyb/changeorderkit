@@ -17,7 +17,7 @@ export function SeoPageView({ page }: { page: SeoPage }) {
           <p className="mt-4 max-w-[65ch] text-lg leading-8 text-[var(--ink-soft)]">
             {page.description}
           </p>
-          <Link href="/" className="btn btn-primary mt-6 w-fit">
+          <Link href="/#generator" className="btn btn-primary mt-6 w-fit">
             {page.primaryCta}
             <ArrowRight className="h-5 w-5" aria-hidden="true" />
           </Link>

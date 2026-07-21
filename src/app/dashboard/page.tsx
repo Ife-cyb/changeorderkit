@@ -21,8 +21,10 @@ import {
 import { SetupNotice } from "@/components/setup-notice";
 import { changeOrderFromRow, profileFromRow } from "@/lib/change-order-records";
 import {
+  deadlineUrgency,
   documentTypeLabel,
   documentTypeOptions,
+  formatDate,
   formatMoney,
   sanitizeDocumentType,
   type DocumentType,
@@ -66,6 +68,23 @@ function TypePill({ documentType }: { documentType: DocumentType }) {
   );
 }
 
+function ApprovalDeadline({ value }: { value: string }) {
+  const urgency = deadlineUrgency(value);
+  const urgencyClass =
+    urgency === "overdue"
+      ? "text-[var(--danger)]"
+      : urgency === "soon"
+        ? "text-[var(--warning)]"
+        : "text-[var(--muted)]";
+
+  return (
+    <span className={`text-sm font-semibold ${urgencyClass}`}>
+      Approval {formatDate(value)}
+      {urgency === "overdue" ? " · Overdue" : urgency === "soon" ? " · Due soon" : ""}
+    </span>
+  );
+}
+
 function EmptyState({ archived = false, activeType }: { archived?: boolean; activeType?: DocumentType }) {
   const typeLabel = activeType ? documentTypeLabel(activeType).toLowerCase() : "documents";
 
@@ -105,6 +124,9 @@ function DocumentList({ orders }: { orders: SavedProjectDocument[] }) {
                 <span className="text-sm font-semibold text-[var(--muted)]">
                   Updated {formatUpdatedAt(order.updatedAt)}
                 </span>
+                {order.input.approvalDeadline ? (
+                  <ApprovalDeadline value={order.input.approvalDeadline} />
+                ) : null}
               </div>
               <h2 className="mt-3 text-xl font-black tracking-tight text-[var(--ink)]">
                 {order.title}

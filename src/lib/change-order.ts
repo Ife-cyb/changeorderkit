@@ -14,6 +14,7 @@ export type DocumentType = "change-order" | "work-order" | "service-agreement";
 
 export type ProjectDocumentStatus = "draft" | "ready" | "archived";
 export type ChangeOrderStatus = ProjectDocumentStatus;
+export type DeadlineUrgency = "overdue" | "soon" | "normal";
 
 export type ProjectDocumentInput = {
   documentType: DocumentType;
@@ -234,6 +235,66 @@ export function documentTypeLabel(documentType: DocumentType) {
   return documentTypeOptions.find((option) => option.value === documentType)?.label ?? "Document";
 }
 
+export function businessInitials(provider?: string | null) {
+  const words = provider?.match(/[\p{L}\p{N}]+/gu) ?? [];
+
+  if (words.length === 0) {
+    return "—";
+  }
+
+  return words
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toLocaleUpperCase("en-US");
+}
+
+function utcCalendarDay(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const parsed = new Date(timestamp);
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return Math.floor(timestamp / 86_400_000);
+}
+
+export function deadlineUrgency(dateString: string, referenceDate: Date = new Date()): DeadlineUrgency {
+  const targetDay = utcCalendarDay(dateString);
+
+  if (targetDay === null || !Number.isFinite(referenceDate.getTime())) {
+    return "normal";
+  }
+
+  const referenceDay = utcCalendarDay(referenceDate.toISOString().slice(0, 10));
+
+  if (referenceDay === null) {
+    return "normal";
+  }
+
+  const daysUntilDeadline = targetDay - referenceDay;
+
+  if (daysUntilDeadline < 0) {
+    return "overdue";
+  }
+
+  return daysUntilDeadline <= 3 ? "soon" : "normal";
+}
+
 export function sanitizeDocumentType(value: unknown, fallback: DocumentType = "change-order"): DocumentType {
   return isAllowedValue(value, documentTypeValues) ? value : fallback;
 }
@@ -252,6 +313,48 @@ export function createDefaultInput(
   };
 
   return profile ? applyBusinessProfileDefaults(base, profile) : base;
+}
+
+export function createBlankInput(
+  profile?: Partial<BusinessProfile>,
+  documentType: DocumentType = "change-order"
+): ProjectDocumentInput {
+  const base: ProjectDocumentInput = {
+    ...defaultInput,
+    documentType,
+    documentTitle: "",
+    provider: "",
+    businessEmail: "",
+    businessPhone: "",
+    client: "",
+    project: "",
+    jobLocation: "",
+    originalScope: "",
+    newRequest: "",
+    scheduleImpact: "",
+    startDate: nextDate(7),
+    endDate: nextDate(10),
+    clientResponsibilities: "",
+    exclusions: "",
+    changePolicy: "",
+    cancellationTerms: "",
+    laborHours: 0,
+    hourlyRate: 0,
+    materialsCost: 0,
+    approvalDeadline: nextDate(3)
+  };
+
+  return profile ? applyBusinessProfileDefaults(base, profile) : base;
+}
+
+export function isExampleInput(input: ProjectDocumentInput) {
+  return documentTypeOptions.some((option) => {
+    const example = createDefaultInput(undefined, option.value);
+
+    return (Object.keys(example) as Array<keyof ProjectDocumentInput>).every(
+      (field) => input[field] === example[field]
+    );
+  });
 }
 
 export function applyBusinessProfileDefaults(
@@ -285,7 +388,10 @@ export function applyBusinessProfileDefaults(
 export function nextDate(daysFromNow: number) {
   const date = new Date();
   date.setDate(date.getDate() + daysFromNow);
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function clampNumber(value: number, min: number, max: number) {
@@ -406,35 +512,46 @@ export const sanitizeProjectDocumentInput = sanitizeChangeOrderInput;
 export function calculatePrice(input: ProjectDocumentInput): PriceBreakdown {
   const laborHours = clampNumber(input.laborHours, 0, 10000);
   const hourlyRate = clampNumber(input.hourlyRate, 0, 100000);
-  const materials = clampNumber(input.materialsCost, 0, 100000000);
+  const materialsCost = clampNumber(input.materialsCost, 0, 100000000);
   const marginPercent = clampNumber(input.marginPercent, 0, 80);
   const rushPercent = clampNumber(input.rushPercent, 0, 100);
   const depositPercent = clampNumber(input.depositPercent, 0, 100);
 
-  const labor = laborHours * hourlyRate;
+  const cents = (value: number) => Math.round(value * 100);
+  const labor = cents(laborHours * hourlyRate);
+  const materials = cents(materialsCost);
   const subtotal = labor + materials;
-  const marginAmount = subtotal * (marginPercent / 100);
-  const rushAmount = subtotal * (rushPercent / 100);
+  const marginAmount = Math.round((subtotal * marginPercent) / 100);
+  const rushAmount = Math.round((subtotal * rushPercent) / 100);
   const total = subtotal + marginAmount + rushAmount;
-  const depositAmount = total * (depositPercent / 100);
+  const depositAmount = Math.round((total * depositPercent) / 100);
   const balanceAmount = total - depositAmount;
 
   return {
-    labor,
-    materials,
-    subtotal,
-    marginAmount,
-    rushAmount,
-    total,
-    depositAmount,
-    balanceAmount
+    labor: labor / 100,
+    materials: materials / 100,
+    subtotal: subtotal / 100,
+    marginAmount: marginAmount / 100,
+    rushAmount: rushAmount / 100,
+    total: total / 100,
+    depositAmount: depositAmount / 100,
+    balanceAmount: balanceAmount / 100
   };
 }
 
 export function formatMoney(value: number, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
+  const normalizedCurrency = normalizeCurrency(currency);
+  const localeByCurrency: Record<string, string> = {
+    AUD: "en-AU",
+    CAD: "en-CA",
+    GBP: "en-GB",
+    NGN: "en-NG",
+    USD: "en-US"
+  };
+
+  return new Intl.NumberFormat(localeByCurrency[normalizedCurrency] || "en-US", {
     style: "currency",
-    currency: normalizeCurrency(currency),
+    currency: normalizedCurrency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(Number.isFinite(value) ? value : 0);
@@ -607,7 +724,7 @@ export function validateChangeOrder(input: ProjectDocumentInput): ValidationErro
   }
 
   if (input.marginPercent < 0 || input.marginPercent > 80) {
-    errors.marginPercent = "Use a margin from 0% to 80%.";
+    errors.marginPercent = "Use a markup from 0% to 80%.";
   }
 
   if (input.rushPercent < 0 || input.rushPercent > 100) {
@@ -653,8 +770,12 @@ function getExternalLinkState(link: string | null | undefined, configuredLabel: 
   }
 }
 
-export function getPaymentState(paymentLink?: string | null) {
-  return getExternalLinkState(paymentLink, "Unlock polished export", "Payment link not configured yet");
+export function getPilotState(pilotLink?: string | null) {
+  return getExternalLinkState(
+    pilotLink,
+    "Join paid approval-link pilot",
+    "Paid pilot link not configured yet"
+  );
 }
 
 export function getTemplateKitState(templateKitLink?: string | null) {
@@ -679,8 +800,8 @@ function priceLines(input: ProjectDocumentInput, breakdown: PriceBreakdown) {
   return [
     `Labor: ${formatMoney(breakdown.labor, input.currency)}`,
     `Materials and direct costs: ${formatMoney(breakdown.materials, input.currency)}`,
-    `Margin/overhead: ${formatMoney(breakdown.marginAmount, input.currency)}`,
-    `Rush/disruption: ${formatMoney(breakdown.rushAmount, input.currency)}`,
+    `Markup + overhead allowance: ${formatMoney(breakdown.marginAmount, input.currency)}`,
+    `Rush + disruption fee: ${formatMoney(breakdown.rushAmount, input.currency)}`,
     `Total: ${formatMoney(breakdown.total, input.currency)}`,
     `Deposit: ${formatMoney(breakdown.depositAmount, input.currency)}`,
     `Balance: ${formatMoney(breakdown.balanceAmount, input.currency)}`
@@ -699,8 +820,8 @@ function summaryLines(input: ProjectDocumentInput, breakdown: PriceBreakdown) {
     "Pricing:",
     `Labor: ${input.laborHours || 0} hours at ${formatMoney(input.hourlyRate || 0, input.currency)}/hour = ${formatMoney(breakdown.labor, input.currency)}`,
     `Materials and direct costs: ${formatMoney(breakdown.materials, input.currency)}`,
-    `Margin/overhead allowance: ${clampNumber(input.marginPercent, 0, 80)}% = ${formatMoney(breakdown.marginAmount, input.currency)}`,
-    `Rush/disruption fee: ${clampNumber(input.rushPercent, 0, 100)}% = ${formatMoney(breakdown.rushAmount, input.currency)}`,
+    `Markup + overhead allowance: ${clampNumber(input.marginPercent, 0, 80)}% = ${formatMoney(breakdown.marginAmount, input.currency)}`,
+    `Rush + disruption fee: ${clampNumber(input.rushPercent, 0, 100)}% = ${formatMoney(breakdown.rushAmount, input.currency)}`,
     `Total: ${formatMoney(breakdown.total, input.currency)}`,
     `Deposit required: ${clampNumber(input.depositPercent, 0, 100)}% = ${formatMoney(breakdown.depositAmount, input.currency)}`
   ];

@@ -1,145 +1,84 @@
 "use client";
 
 import {
-  AlertTriangle,
   ArrowRight,
   BriefcaseBusiness,
-  Calculator,
   CalendarClock,
-  CheckCircle2,
-  ChevronDown,
   CircleDollarSign,
-  Copy,
-  Download,
-  ExternalLink,
-  FileCheck2,
-  FileText,
-  Mail,
-  MapPin,
-  Printer,
   RotateCcw,
   Save,
   ShieldCheck,
-  UserPlus
+  Trash2
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ChangeEvent,
-  FormEvent,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition
-} from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveChangeOrderAction } from "@/app/actions/change-orders";
+import { DraftSummaryCard } from "@/components/generator/draft-summary-card";
+import { GuidedSectionHeader } from "@/components/generator/guided-section-header";
+import { IntakeContactFields } from "@/components/generator/intake-contact-fields";
+import {
+  IntakePricingFields,
+  type NumericField
+} from "@/components/generator/intake-pricing-fields";
+import { IntakeScopeFields } from "@/components/generator/intake-scope-fields";
+import { IntakeTermsFields } from "@/components/generator/intake-terms-fields";
+import {
+  OutputPanel,
+  type OutputMode,
+  outputFilename,
+  outputText
+} from "@/components/generator/output-panel";
 import {
   type BusinessProfile,
   type ChangeOrderInput,
   type DocumentType,
-  type GeneratedChangeOrder,
+  deadlineUrgency,
   documentTypeLabel,
   documentTypeOptions,
+  createBlankInput,
   createDefaultInput,
-  defaultInput,
-  formatDate,
-  formatMoney,
   generateChangeOrder,
-  getPaymentState,
+  getPilotState,
   getTemplateKitState,
+  isExampleInput,
   sanitizeChangeOrderInput,
   validateChangeOrder,
-  type Industry,
-  type PaymentTiming,
-  type Tone,
   type ValidationErrors
 } from "@/lib/change-order";
+import { funnelEvents, totalBucket } from "@/lib/funnel";
 import { trackEvent } from "@/lib/tracking";
 
-type OutputMode = "document" | "email" | "invoice" | "follow-up";
 type GuidedSectionId = "job" | "scope" | "price" | "approval";
 
 type Props = {
-  paymentLink?: string;
+  pilotLink?: string;
   templateKitLink?: string;
+  showUpsells?: boolean;
   initialInput?: ChangeOrderInput;
   savedOrderId?: string;
   isSignedIn?: boolean;
   businessProfile?: BusinessProfile | null;
   useLocalDraft?: boolean;
+  headingLevel?: "h1" | "h2";
 };
 
 const storageKey = "changeorderkit:draft:v2";
 const documentStorageKey = "changeorderkit:draft:v3";
 
-const industries: Array<{ value: Industry; label: string }> = [
-  { value: "remodeling", label: "Remodeling" },
-  { value: "landscaping", label: "Landscaping" },
-  { value: "handyman", label: "Handyman" },
-  { value: "web-design", label: "Web design" },
-  { value: "creative", label: "Creative services" },
-  { value: "consulting", label: "Consulting" }
-];
-
-const tones: Array<{ value: Tone; label: string }> = [
-  { value: "friendly", label: "Friendly" },
-  { value: "direct", label: "Direct" },
-  { value: "formal", label: "Formal" }
-];
-
-const paymentTimings: Array<{ value: PaymentTiming; label: string }> = [
-  { value: "deposit-before", label: "Deposit before work begins" },
-  { value: "completion", label: "Due when added work is complete" },
-  { value: "next-invoice", label: "Add to next invoice" }
-];
-
-const currencies = [
-  { value: "USD", label: "USD · US dollar" },
-  { value: "CAD", label: "CAD · Canadian dollar" },
-  { value: "GBP", label: "GBP · British pound" },
-  { value: "AUD", label: "AUD · Australian dollar" },
-  { value: "NGN", label: "NGN · Nigerian naira" }
-] as const;
+type LocalDraftRecord = {
+  input: ChangeOrderInput;
+  savedAt: string | null;
+};
 
 const guidedSections: Array<{
   id: GuidedSectionId;
   label: string;
-  title: string;
   description: string;
 }> = [
-  {
-    id: "job",
-    label: "Job",
-    title: "Name the job",
-    description: "Who is approving it, and what project is this for?"
-  },
-  {
-    id: "scope",
-    label: "Scope",
-    title: "Describe the work",
-    description: "Capture what the client expects in plain language."
-  },
-  {
-    id: "price",
-    label: "Price",
-    title: "Price it once",
-    description: "Enter the inputs you already use on the job."
-  },
-  {
-    id: "approval",
-    label: "Approval",
-    title: "Set the handoff",
-    description: "Choose what is due and when the client must respond."
-  }
-];
-
-const outputModes: Array<{ value: OutputMode; label: string }> = [
-  { value: "document", label: "Document" },
-  { value: "email", label: "Email" },
-  { value: "invoice", label: "Invoice note" },
-  { value: "follow-up", label: "Follow-up" }
+  { id: "job", label: "Job", description: "Who and where" },
+  { id: "scope", label: "Scope", description: "What changes" },
+  { id: "price", label: "Price", description: "What it costs" },
+  { id: "approval", label: "Approval", description: "What happens next" }
 ];
 
 const documentCopy: Record<
@@ -187,49 +126,35 @@ function titleForProject(documentType: DocumentType, project: string) {
   return trimmedProject ? `${documentTypeLabel(documentType)} for ${trimmedProject}` : "";
 }
 
-function createBlankDraft(
-  documentType: DocumentType,
-  profile?: BusinessProfile | null
-): ChangeOrderInput {
-  const defaults = createDefaultInput(profile ?? undefined, documentType);
-
-  return {
-    ...defaults,
-    documentTitle: "",
-    provider: profile?.businessName?.trim() || "",
-    businessEmail: profile?.contactEmail?.trim() || "",
-    businessPhone: profile?.phone?.trim() || "",
-    client: "",
-    project: "",
-    jobLocation: "",
-    originalScope: "",
-    newRequest: "",
-    scheduleImpact: "",
-    startDate: "",
-    endDate: "",
-    clientResponsibilities: "",
-    exclusions: "",
-    changePolicy: "",
-    cancellationTerms: "",
-    laborHours: 0,
-    materialsCost: 0,
-    rushPercent: 0
-  };
-}
-
-function parseSavedDraft(value: string | null): ChangeOrderInput | null {
+function parseSavedDraft(value: string | null): LocalDraftRecord | null {
   if (!value) {
     return null;
   }
 
   try {
-    return sanitizeChangeOrderInput(JSON.parse(value));
+    const parsed: unknown = JSON.parse(value);
+
+    if (parsed && typeof parsed === "object" && "input" in parsed) {
+      const record = parsed as { input: unknown; savedAt?: unknown };
+
+      const savedAt = typeof record.savedAt === "string" ? record.savedAt : "";
+
+      return {
+        input: sanitizeChangeOrderInput(record.input),
+        savedAt: Number.isFinite(Date.parse(savedAt)) ? savedAt : null
+      };
+    }
+
+    return {
+      input: sanitizeChangeOrderInput(parsed),
+      savedAt: null
+    };
   } catch {
     return null;
   }
 }
 
-function readSavedDraft(): ChangeOrderInput | null {
+function readSavedDraft(): LocalDraftRecord | null {
   try {
     return parseSavedDraft(
       window.localStorage.getItem(documentStorageKey) ?? window.localStorage.getItem(storageKey)
@@ -241,9 +166,12 @@ function readSavedDraft(): ChangeOrderInput | null {
 
 function writeSavedDraft(input: ChangeOrderInput) {
   try {
-    window.localStorage.setItem(documentStorageKey, JSON.stringify(input));
+    const savedAt = new Date().toISOString();
+    window.localStorage.setItem(documentStorageKey, JSON.stringify({ input, savedAt }));
+    return savedAt;
   } catch {
     // Browsers can block storage in private or restricted modes.
+    return null;
   }
 }
 
@@ -256,288 +184,107 @@ function clearSavedDraft() {
   }
 }
 
-function InputError({ id, message }: { id: string; message?: string }) {
-  if (!message) {
-    return null;
+function autosaveLabel(
+  savedAt: string | null,
+  now: number,
+  useLocalDraft: boolean,
+  autosaveAvailable: boolean
+) {
+  if (!useLocalDraft) {
+    return "Account record";
   }
 
-  return (
-    <p id={id} className="flex items-start gap-1.5 text-sm font-semibold text-[var(--danger)]" role="alert">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      {message}
-    </p>
-  );
-}
-
-function GuidedSectionHeader({
-  number,
-  title,
-  description,
-  ready,
-  hasError,
-  icon
-}: {
-  number: string;
-  title: string;
-  description: string;
-  ready: boolean;
-  hasError: boolean;
-  icon: ReactNode;
-}) {
-  return (
-    <div className="guided-section-header">
-      <div className="guided-section-heading">
-        <span className="guided-section-number" aria-hidden="true">
-          {number}
-        </span>
-        <span className="guided-section-icon" aria-hidden="true">
-          {icon}
-        </span>
-        <div>
-          <h3>{title}</h3>
-          <p>{description}</p>
-        </div>
-      </div>
-      <span
-        className={
-          hasError
-            ? "guided-section-state guided-section-state-error"
-            : ready
-              ? "guided-section-state guided-section-state-ready"
-              : "guided-section-state"
-        }
-      >
-        {hasError ? (
-          <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-        ) : ready ? (
-          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-        ) : null}
-        {hasError ? "Needs attention" : ready ? "Ready" : "In progress"}
-      </span>
-    </div>
-  );
-}
-
-function outputText(generated: GeneratedChangeOrder, mode: OutputMode) {
-  if (mode === "email") {
-    return generated.clientEmail;
+  if (!autosaveAvailable) {
+    return "Autosave unavailable";
   }
 
-  if (mode === "invoice") {
-    return generated.invoiceNote;
+  if (!savedAt) {
+    return "Autosave ready";
   }
 
-  if (mode === "follow-up") {
-    return generated.followUpTemplate;
+  const parsedSavedAt = Date.parse(savedAt);
+
+  if (!Number.isFinite(parsedSavedAt)) {
+    return "Autosave ready";
   }
 
-  return generated.primaryDocument;
+  const elapsedMinutes = Math.max(0, Math.floor((now - parsedSavedAt) / 60_000));
+
+  if (elapsedMinutes < 1) {
+    return "Autosaved just now";
+  }
+
+  if (elapsedMinutes < 60) {
+    return `Autosaved ${elapsedMinutes}m ago`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  return `Autosaved ${elapsedHours}h ago`;
 }
 
-function documentSlug(documentType: DocumentType) {
-  return documentType;
+function preferredScrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 
-function outputFilename(mode: OutputMode, documentType: DocumentType) {
-  const slug = documentSlug(documentType);
-  const names: Record<OutputMode, string> = {
-    document: `${slug}-document.txt`,
-    email: `${slug}-email.txt`,
-    invoice: `${slug}-invoice-note.txt`,
-    "follow-up": `${slug}-follow-up.txt`
-  };
+function printWithDocumentTitle(title: string) {
+  const previousTitle = document.title;
+  document.title = title;
 
-  return names[mode];
-}
-
-function PrintableDocument({
-  input,
-  generated
-}: {
-  input: ChangeOrderInput;
-  generated: GeneratedChangeOrder;
-}) {
-  const isChangeOrder = input.documentType === "change-order";
-  const isServiceAgreement = input.documentType === "service-agreement";
-  const label = documentTypeLabel(input.documentType);
-
-  return (
-    <div className="print-document" aria-label={`Printable ${label.toLowerCase()} document`}>
-      <header className="print-document-header">
-        <div>
-          <p className="print-kicker">{label}</p>
-          <h2>{generated.documentTitle}</h2>
-        </div>
-        <div className="print-business">
-          <strong>{input.provider || "Your business"}</strong>
-          <span>{input.businessEmail || "Email not provided"}</span>
-          <span>{input.businessPhone || "Phone not provided"}</span>
-        </div>
-      </header>
-
-      <div className="print-meta-grid">
-        <div>
-          <span>Client</span>
-          <strong>{input.client || "Client"}</strong>
-        </div>
-        <div>
-          <span>Project</span>
-          <strong>{input.project || "Project"}</strong>
-        </div>
-        {!isChangeOrder ? (
-          <div>
-            <span>Job location</span>
-            <strong>{input.jobLocation || "Location not provided"}</strong>
-          </div>
-        ) : null}
-        <div>
-          <span>Approval deadline</span>
-          <strong>{formatDate(input.approvalDeadline)}</strong>
-        </div>
-      </div>
-
-      {isChangeOrder ? (
-        <section>
-          <h3>Original approved scope</h3>
-          <p>{input.originalScope || "Original scope not provided."}</p>
-        </section>
-      ) : null}
-
-      <section>
-        <h3>{isChangeOrder ? "Requested added work" : "Scope of work"}</h3>
-        <p>{input.newRequest || "Scope of work not provided."}</p>
-      </section>
-
-      <section>
-        <h3>{isChangeOrder ? "Schedule impact" : "Schedule"}</h3>
-        <p>
-          {input.scheduleImpact ||
-            (input.startDate || input.endDate
-              ? `${input.startDate || "Start TBD"} to ${input.endDate || "completion TBD"}`
-              : "Schedule will be confirmed after approval.")}
-        </p>
-      </section>
-
-      {!isChangeOrder ? (
-        <section>
-          <h3>Client responsibilities</h3>
-          <p>{input.clientResponsibilities || "Client responsibilities not provided."}</p>
-        </section>
-      ) : null}
-
-      <section>
-        <h3>Pricing</h3>
-        <table>
-          <tbody>
-            <tr>
-              <th scope="row">Labor</th>
-              <td>{formatMoney(generated.breakdown.labor, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Materials and direct costs</th>
-              <td>{formatMoney(generated.breakdown.materials, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Margin/overhead</th>
-              <td>{formatMoney(generated.breakdown.marginAmount, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Rush/disruption</th>
-              <td>{formatMoney(generated.breakdown.rushAmount, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Deposit</th>
-              <td>{formatMoney(generated.breakdown.depositAmount, input.currency)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Balance</th>
-              <td>{formatMoney(generated.breakdown.balanceAmount, input.currency)}</td>
-            </tr>
-            <tr className="total-row">
-              <th scope="row">Total</th>
-              <td>{formatMoney(generated.breakdown.total, input.currency)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      {isServiceAgreement ? (
-        <>
-          <section>
-            <h3>Changes to scope</h3>
-            <p>{input.changePolicy || "Changes must be approved in writing before scheduling."}</p>
-          </section>
-          <section>
-            <h3>Cancellation</h3>
-            <p>{input.cancellationTerms || "Cancellation terms should be reviewed before use."}</p>
-          </section>
-        </>
-      ) : null}
-
-      <section>
-        <h3>Payment terms</h3>
-        <p>{generated.paymentTerms}</p>
-      </section>
-
-      <section>
-        <h3>Scope boundary</h3>
-        <p>{input.exclusions || "No additional exclusions listed."}</p>
-        <p>{generated.approvalText}</p>
-        {isServiceAgreement ? (
-          <p>
-            This service agreement starter is a business template, not legal advice. Have legal
-            terms reviewed for your location and trade.
-          </p>
-        ) : null}
-      </section>
-
-      <section className="signature-grid">
-        <div>
-          <span>Client name</span>
-          <i />
-        </div>
-        <div>
-          <span>Signature</span>
-          <i />
-        </div>
-        <div>
-          <span>Date</span>
-          <i />
-        </div>
-      </section>
-    </div>
-  );
+  try {
+    window.print();
+  } finally {
+    document.title = previousTitle;
+  }
 }
 
 export function ChangeOrderGenerator({
-  paymentLink,
+  pilotLink,
   templateKitLink,
+  showUpsells = false,
   initialInput,
   savedOrderId,
   isSignedIn = false,
   businessProfile,
-  useLocalDraft = true
+  useLocalDraft = true,
+  headingLevel = "h1"
 }: Props) {
   const router = useRouter();
   const [input, setInput] = useState<ChangeOrderInput>(() =>
-    sanitizeChangeOrderInput(initialInput ?? defaultInput)
+    sanitizeChangeOrderInput(initialInput ?? createDefaultInput(businessProfile ?? undefined))
   );
   const [currentOrderId, setCurrentOrderId] = useState(savedOrderId ?? "");
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [toast, setToast] = useState("");
+  const [numericDrafts, setNumericDrafts] = useState<Partial<Record<NumericField, string>>>({});
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [activeSection, setActiveSection] = useState<GuidedSectionId>("job");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [autosaveAvailable, setAutosaveAvailable] = useState(true);
+  const [autosaveClock, setAutosaveClock] = useState(() => Date.now());
   const [outputMode, setOutputMode] = useState<OutputMode>("document");
   const [isSaving, startSaving] = useTransition();
+  const intakeRef = useRef<HTMLFormElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
   const toastTimerRef = useRef<number | null>(null);
+  const viewedTrackedRef = useRef(false);
+  const startedTrackedRef = useRef(false);
   const firstErrorRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(
     null
   );
 
   const generated = useMemo(() => generateChangeOrder(input), [input]);
-  const paymentState = getPaymentState(paymentLink);
+  const pilotState = getPilotState(pilotLink);
   const kitState = getTemplateKitState(templateKitLink);
+  const showKitUpsell = showUpsells && kitState.configured;
+  const showPilotUpsell = showUpsells && pilotState.configured;
+  const upsellCount = Number(showKitUpsell) + Number(showPilotUpsell);
+  const actionGridClass =
+    upsellCount === 2
+      ? "no-print mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-5"
+      : upsellCount === 1
+        ? "no-print mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        : "no-print mt-5 grid gap-3 sm:grid-cols-3";
   const hasErrors = Object.keys(errors).length > 0;
   const selectedOutput = outputText(generated, outputMode);
   const activeCopy = documentCopy[input.documentType];
@@ -548,9 +295,7 @@ export function ChangeOrderGenerator({
   const sectionReadiness = useMemo<Record<GuidedSectionId, boolean>>(
     () => ({
       job: Boolean(input.provider.trim() && input.client.trim() && input.project.trim()),
-      scope: Boolean(
-        input.newRequest.trim() && (!isChangeOrder || input.originalScope.trim())
-      ),
+      scope: Boolean(input.newRequest.trim() && (!isChangeOrder || input.originalScope.trim())),
       price: generated.breakdown.total > 0,
       approval: Boolean(input.approvalDeadline && input.paymentTiming)
     }),
@@ -561,7 +306,11 @@ export function ChangeOrderGenerator({
   const sectionErrors = useMemo<Record<GuidedSectionId, boolean>>(
     () => ({
       job: Boolean(
-        errors.documentTitle || errors.provider || errors.businessEmail || errors.client || errors.project
+        errors.documentTitle ||
+          errors.provider ||
+          errors.businessEmail ||
+          errors.client ||
+          errors.project
       ),
       scope: Boolean(errors.originalScope || errors.newRequest),
       price: Boolean(
@@ -575,17 +324,31 @@ export function ChangeOrderGenerator({
     }),
     [errors]
   );
-  const isExampleDraft =
-    input.client === defaultInput.client &&
-    input.project === defaultInput.project &&
-    input.newRequest ===
-      createDefaultInput(undefined, input.documentType).newRequest;
+  const hasBlankOutput = !input.provider.trim() && !input.client.trim() && !input.newRequest.trim();
+  const approvalUrgency = deadlineUrgency(input.approvalDeadline);
+  const exampleInput = isExampleInput(input);
+  const approvalDeadlineClass =
+    approvalUrgency === "overdue"
+      ? "text-[var(--danger)]"
+      : approvalUrgency === "soon"
+        ? "text-[var(--warning)]"
+        : "text-[var(--ink)]";
+  const HeroHeading = headingLevel;
+
+  useEffect(() => {
+    if (!viewedTrackedRef.current) {
+      trackEvent(funnelEvents.generatorViewed, { document_type: input.documentType });
+      viewedTrackedRef.current = true;
+    }
+  }, [input.documentType]);
 
   useEffect(() => {
     const restoreId = window.setTimeout(() => {
       const fallback = createDefaultInput(businessProfile ?? undefined);
       const restored = useLocalDraft ? readSavedDraft() : null;
-      setInput(restored ?? sanitizeChangeOrderInput(initialInput ?? fallback));
+      setInput(restored?.input ?? sanitizeChangeOrderInput(initialInput ?? fallback));
+      setNumericDrafts({});
+      setLastSavedAt(restored?.savedAt ?? null);
       setDraftLoaded(true);
     }, 0);
 
@@ -597,8 +360,23 @@ export function ChangeOrderGenerator({
       return;
     }
 
-    writeSavedDraft(input);
+    const saveId = window.setTimeout(() => {
+      const savedAt = writeSavedDraft(input);
+      setAutosaveAvailable(Boolean(savedAt));
+
+      if (savedAt) {
+        setLastSavedAt(savedAt);
+        setAutosaveClock(Date.now());
+      }
+    }, 400);
+
+    return () => window.clearTimeout(saveId);
   }, [draftLoaded, input, useLocalDraft]);
+
+  useEffect(() => {
+    const clockId = window.setInterval(() => setAutosaveClock(Date.now()), 30_000);
+    return () => window.clearInterval(clockId);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -620,6 +398,19 @@ export function ChangeOrderGenerator({
     }, 3500);
   }
 
+  function trackFormStarted() {
+    if (!startedTrackedRef.current) {
+      trackEvent(funnelEvents.formStarted, { document_type: input.documentType });
+      startedTrackedRef.current = true;
+    }
+  }
+
+  function startDocument() {
+    trackFormStarted();
+    intakeRef.current?.scrollIntoView({ behavior: preferredScrollBehavior(), block: "start" });
+    window.setTimeout(() => firstFieldRef.current?.focus({ preventScroll: true }), 300);
+  }
+
   function clearFieldError(field: keyof ChangeOrderInput) {
     setErrors((current) => {
       if (!current[field]) {
@@ -633,11 +424,13 @@ export function ChangeOrderGenerator({
   }
 
   function setTextField(field: keyof ChangeOrderInput, value: string) {
+    trackFormStarted();
     setInput((current) => ({ ...current, [field]: value }));
     clearFieldError(field);
   }
 
   function setProjectName(value: string) {
+    trackFormStarted();
     setInput((current) => {
       const currentAutoTitle = titleForProject(current.documentType, current.project);
       const knownDefaultTitles = documentTypeOptions.map(
@@ -663,12 +456,13 @@ export function ChangeOrderGenerator({
   function jumpToSection(sectionId: GuidedSectionId) {
     setActiveSection(sectionId);
     document.getElementById(`form-section-${sectionId}`)?.scrollIntoView({
-      behavior: "smooth",
+      behavior: preferredScrollBehavior(),
       block: "start"
     });
   }
 
   function setDocumentType(value: DocumentType) {
+    trackFormStarted();
     setInput((current) => {
       const nextDefault = createDefaultInput(businessProfile ?? undefined, value);
       const defaults = documentTypeOptions.map((option) => createDefaultInput(undefined, option.value));
@@ -701,10 +495,24 @@ export function ChangeOrderGenerator({
     setErrors({});
   }
 
-  function setNumberField(field: keyof ChangeOrderInput, value: string) {
+  function setNumberField(field: NumericField, value: string) {
+    trackFormStarted();
+    setNumericDrafts((current) => ({ ...current, [field]: value }));
     const parsed = Number.parseFloat(value);
     setInput((current) => ({ ...current, [field]: Number.isFinite(parsed) ? parsed : 0 }));
     clearFieldError(field);
+  }
+
+  function numberFieldValue(field: NumericField) {
+    return numericDrafts[field] ?? String(input[field]);
+  }
+
+  function normalizeNumberField(field: NumericField) {
+    setNumericDrafts((current) => {
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
   }
 
   function registerFirstError(
@@ -722,11 +530,7 @@ export function ChangeOrderGenerator({
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
-      window.setTimeout(() => {
-        const firstError = firstErrorRef.current;
-        firstError?.closest("details")?.setAttribute("open", "");
-        firstError?.focus();
-      }, 0);
+      window.setTimeout(() => firstErrorRef.current?.focus(), 0);
       return false;
     }
 
@@ -738,16 +542,21 @@ export function ChangeOrderGenerator({
 
     if (!runValidation()) {
       showToast("Fix the highlighted fields before sending.");
-      trackEvent("validation_failed", { fields: Object.keys(validateChangeOrder(input)).join(",") });
+      trackEvent(funnelEvents.validationFailed, {
+        fields: Object.keys(validateChangeOrder(input)).join(",")
+      });
       return;
     }
 
-    outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (window.matchMedia("(max-width: 1279px)").matches) {
+      outputRef.current?.scrollIntoView({ behavior: preferredScrollBehavior(), block: "start" });
+    }
     showToast(activeCopy.generatedToast);
-    trackEvent("document_generated", {
+    trackEvent(funnelEvents.changeOrderGenerated, {
       document_type: input.documentType,
       industry: input.industry,
-      total: Math.round(generated.breakdown.total)
+      currency: input.currency,
+      total_bucket: totalBucket(generated.breakdown.total)
     });
   }
 
@@ -792,7 +601,7 @@ export function ChangeOrderGenerator({
     try {
       await navigator.clipboard.writeText(selectedOutput);
       showToast("Copied to clipboard.");
-      trackEvent("document_copied", {
+      trackEvent(funnelEvents.changeOrderCopied, {
         document_type: input.documentType,
         industry: input.industry,
         output: outputMode
@@ -818,7 +627,7 @@ export function ChangeOrderGenerator({
     link.remove();
     URL.revokeObjectURL(url);
     showToast("Downloaded text file.");
-    trackEvent("document_downloaded", {
+    trackEvent(funnelEvents.changeOrderDownloaded, {
       document_type: input.documentType,
       industry: input.industry,
       output: outputMode
@@ -832,187 +641,166 @@ export function ChangeOrderGenerator({
     }
 
     setOutputMode("document");
-    trackEvent("document_printed", { document_type: input.documentType, industry: input.industry });
-    window.setTimeout(() => window.print(), 0);
+    trackEvent(funnelEvents.changeOrderPrinted, {
+      document_type: input.documentType,
+      industry: input.industry
+    });
+    window.setTimeout(
+      () => printWithDocumentTitle(input.documentTitle.trim() || documentLabel),
+      0
+    );
   }
 
   function resetDraft() {
     clearSavedDraft();
     setInput(createDefaultInput(businessProfile ?? undefined, input.documentType));
+    setNumericDrafts({});
     setErrors({});
     setActiveSection("job");
     showToast("Example draft restored.");
-    trackEvent("draft_reset");
+    trackEvent(funnelEvents.draftReset);
   }
 
-  function startBlankDraft() {
+  function clearToBlank(eventName: "example_cleared" | "form_cleared", message: string) {
     clearSavedDraft();
-    setInput(createBlankDraft(input.documentType, businessProfile));
+    setInput(createBlankInput(businessProfile ?? undefined, input.documentType));
+    setNumericDrafts({});
     setErrors({});
     setActiveSection("job");
-    setOutputMode("document");
-    showToast(`Blank ${documentLabelLower} ready.`);
-    trackEvent("blank_draft_started", { document_type: input.documentType });
-    window.setTimeout(() => {
-      document.getElementById("project-name")?.focus();
-    }, 0);
+    setLastSavedAt(null);
+    showToast(message);
+    trackEvent(eventName, { document_type: input.documentType });
+    window.setTimeout(() => firstFieldRef.current?.focus(), 0);
   }
 
-  function handlePaymentClick() {
-    if (!paymentState.configured) {
-      showToast("Payment link not configured yet.");
-      trackEvent("payment_link_missing");
-      return;
-    }
-
-    trackEvent("payment_cta_clicked");
+  function handlePilotClick() {
+    trackEvent(funnelEvents.pilotCtaClicked, { source: "generator" });
   }
 
   function handleKitClick() {
-    if (!kitState.configured) {
-      showToast("Template kit link not configured yet.");
-      trackEvent("template_kit_link_missing");
-      return;
-    }
-
     trackEvent("template_kit_cta_clicked");
   }
 
   return (
-    <section className="tool-shell generator-shell py-6 sm:py-9" aria-label="Document generator">
-      <div className="generator-intro mb-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.38fr)] lg:items-end">
+    <section id="generator" className="tool-shell scroll-mt-24 py-5 sm:py-10" aria-label="Document generator">
+      <div className="mb-4 grid gap-4 sm:mb-6 sm:gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.45fr)] lg:items-end">
         <div>
           <p className="panel-kicker mb-3">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Guided job desk
+            Document generator
           </p>
-          <h1 className="max-w-4xl text-3xl font-black leading-[0.98] tracking-tight text-[var(--ink)] sm:text-5xl lg:text-6xl">
+          <HeroHeading className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight text-[var(--ink)] sm:text-5xl lg:text-7xl">
             {activeCopy.hero}
-          </h1>
-          <p className="generator-dek mt-4 max-w-[65ch] text-base leading-7 text-[var(--ink-soft)] sm:text-lg sm:leading-8">
+          </HeroHeading>
+          <p className="mt-3 max-w-[65ch] text-lg leading-8 text-[var(--ink-soft)] sm:mt-5">
             {activeCopy.dek}
           </p>
-          <div className="document-type-switcher mt-5" role="tablist" aria-label="Document type">
+          <button type="button" className="btn btn-primary mt-4" onClick={startDocument}>
+            Start your {documentLabelLower}
+          </button>
+          <p className="mt-4 text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)] sm:mt-5">
+            Document type
+          </p>
+          <div
+            className="mt-2 grid w-full max-w-3xl grid-cols-1 gap-2 sm:grid-cols-3"
+            role="radiogroup"
+            aria-label="Document type"
+          >
             {documentTypeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 className={input.documentType === option.value ? "segment segment-active" : "segment"}
                 onClick={() => setDocumentType(option.value)}
-                role="tab"
-                aria-selected={input.documentType === option.value}
+                role="radio"
+                aria-checked={input.documentType === option.value}
               >
                 {option.label}
               </button>
             ))}
           </div>
         </div>
-        <aside className="ledger-rail no-print overflow-hidden" aria-label="Current draft status">
-          <div className="p-4">
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-[color:oklch(0.77_0.04_155)]">
-              {completedSections === guidedSections.length ? "Ready for review" : "Draft in progress"}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:oklch(0.88_0.012_115)]">
-              Replace the sample with the real job. The price and client document update as you type.
-            </p>
-          </div>
-          <div className="ledger-progress" aria-label={`${completionPercent}% of guided sections ready`}>
-            <span style={{ transform: `scaleX(${completionPercent / 100})` }} />
-          </div>
-          <div className="ledger-row">
-            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Form readiness</span>
-            <strong className="font-mono text-sm">{completedSections} / 4</strong>
-          </div>
-          <div className="ledger-row">
-            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Document type</span>
-            <strong className="text-right text-sm">{documentLabel}</strong>
-          </div>
-          <div className="ledger-row">
-            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Current total</span>
-            <strong className="font-mono text-sm">
-              {formatMoney(generated.breakdown.total, input.currency)}
-            </strong>
-          </div>
-          <div className="ledger-row">
-            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Deposit due</span>
-            <strong className="font-mono text-sm">
-              {formatMoney(generated.breakdown.depositAmount, input.currency)}
-            </strong>
-          </div>
-          <div className="ledger-row">
-            <span className="text-sm text-[color:oklch(0.78_0.014_115)]">Approval by</span>
-            <strong className="font-mono text-sm">{formatDate(input.approvalDeadline)}</strong>
-          </div>
-          <div className="border-t border-[color:oklch(0.48_0.02_145_/_0.42)] p-3">
-            {isSignedIn ? (
-              <Link className="btn btn-secondary w-full" href="/dashboard">
-                <FileText className="h-5 w-5" aria-hidden="true" />
-                Dashboard
-              </Link>
-            ) : (
-              <Link className="btn btn-secondary w-full" href="/sign-in?next=/">
-                <UserPlus className="h-5 w-5" aria-hidden="true" />
-                Sign in to save
-              </Link>
-            )}
-          </div>
-        </aside>
+        <DraftSummaryCard
+          isSignedIn={isSignedIn}
+          documentLabel={documentLabel}
+          exampleInput={exampleInput}
+          total={generated.breakdown.total}
+          deposit={generated.breakdown.depositAmount}
+          currency={input.currency}
+          approvalDeadline={input.approvalDeadline}
+          approvalUrgency={approvalUrgency}
+          approvalDeadlineClass={approvalDeadlineClass}
+        />
       </div>
 
-      <div className="generator-workspace grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(460px,1.1fr)]">
-        <form className="utility-panel guided-form no-print overflow-hidden" onSubmit={onGenerate} noValidate>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(430px,1.08fr)] xl:items-start">
+        <form
+          ref={intakeRef}
+          className="utility-panel guided-form-shell no-print scroll-mt-6 overflow-hidden"
+          onSubmit={onGenerate}
+          noValidate
+        >
           <div className="guided-form-topbar">
             <div>
-              <p className="panel-kicker">Your job, in order</p>
+              <p className="panel-kicker">Guided job intake</p>
               <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--ink)]">
                 Build the {documentLabelLower}
               </h2>
-              <p className="guided-form-dek mt-1 text-sm leading-6 text-[var(--muted)]">
-                Required decisions stay visible. Supporting detail opens only when you need it.
+              <p className="guided-form-dek mt-2 max-w-[52ch] text-sm leading-6 text-[var(--muted)]">
+                Work through the job in the same order you would explain it to your client.
               </p>
             </div>
-            <div className="guided-form-utilities" aria-label="Draft controls">
-              <button type="button" className="form-text-action" onClick={startBlankDraft}>
-                Start blank
-              </button>
+            <div className="guided-form-utilities">
+              <span className="autosave-note">
+                <span aria-hidden="true" />
+                {autosaveLabel(lastSavedAt, autosaveClock, useLocalDraft, autosaveAvailable)}
+              </span>
               <button type="button" className="form-text-action" onClick={resetDraft}>
                 <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                Use example
+                Example
               </button>
-              <span className="autosave-note" role="status">
-                <span aria-hidden="true" />
-                {draftLoaded ? "Autosaved locally" : "Loading draft"}
-              </span>
+              <button
+                type="button"
+                className="form-text-action"
+                onClick={() => clearToBlank(funnelEvents.formCleared, "Form cleared.")}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Clear
+              </button>
             </div>
           </div>
-
-          {isExampleDraft ? (
+          {exampleInput ? (
             <div className="example-handoff">
-              <FileCheck2 className="h-5 w-5 shrink-0" aria-hidden="true" />
-              <div>
-                <strong>See the finished result first.</strong>
-                <span> This example is ready to review. Replace each detail with the real job, or start blank.</span>
-              </div>
-              <button type="button" onClick={startBlankDraft}>
-                Start my job
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              <p>
+                <strong>Example job loaded.</strong>{" "}
+                <span>See the finished result, then replace it with your own details.</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => clearToBlank(funnelEvents.exampleCleared, "Ready for your job details.")}
+              >
+                Use my own job
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           ) : null}
+          {hasErrors ? (
+            <div className="form-error-summary" role="alert">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              <p>
+                <strong>A few details need attention.</strong>{" "}
+                <span>The first highlighted field is ready for you.</span>
+              </p>
+            </div>
+          ) : null}
 
-          <nav className="form-progress" aria-label={`${documentLabel} form progress`}>
+          <nav className="form-progress" aria-label="Form sections">
             <div className="form-progress-summary">
               <span>{completedSections} of 4 sections ready</span>
               <span>{completionPercent}%</span>
             </div>
-            <div
-              className="form-progress-track"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={completionPercent}
-              aria-label="Form completion"
-            >
+            <div className="form-progress-track" aria-hidden="true">
               <span style={{ transform: `scaleX(${completionPercent / 100})` }} />
             </div>
             <ol>
@@ -1028,18 +816,10 @@ export function ChangeOrderGenerator({
                     onClick={() => jumpToSection(section.id)}
                     aria-current={activeSection === section.id ? "step" : undefined}
                   >
-                    <span className="form-progress-index" aria-hidden="true">
-                      {sectionErrors[section.id] ? (
-                        <AlertTriangle className="h-4 w-4" />
-                      ) : sectionReadiness[section.id] ? (
-                        <CheckCircle2 className="h-4 w-4" />
-                      ) : (
-                        String(index + 1).padStart(2, "0")
-                      )}
-                    </span>
+                    <span className="form-progress-index">{String(index + 1).padStart(2, "0")}</span>
                     <span>
                       <strong>{section.label}</strong>
-                      <small>{section.title}</small>
+                      <small>{section.description}</small>
                     </span>
                   </button>
                 </li>
@@ -1047,187 +827,31 @@ export function ChangeOrderGenerator({
             </ol>
           </nav>
 
-          {hasErrors ? (
-            <div className="form-error-summary" role="alert">
-              <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden="true" />
-              <div>
-                <strong>A few details still need you.</strong>
-                <span> We moved focus to the first one. Fix it, then review the client document.</span>
-              </div>
-            </div>
-          ) : null}
-
           <fieldset
             id="form-section-job"
             className="guided-form-section"
             onFocusCapture={() => setActiveSection("job")}
           >
-            <legend className="sr-only">Job details</legend>
+            <legend className="sr-only">Job and contact details</legend>
             <GuidedSectionHeader
               number="01"
               title="Name the job"
-              description="Start with the same details you would say out loud to your team."
+              description="Start with the people and project so the document feels real immediately."
               ready={sectionReadiness.job}
               hasError={sectionErrors.job}
-              icon={<BriefcaseBusiness className="h-5 w-5" />}
+              icon={BriefcaseBusiness}
             />
-            <div className="guided-fields grid gap-4 md:grid-cols-2">
-              <label className="field-label md:col-span-2" htmlFor="project-name">
-                Project or job name
-                <input
-                  id="project-name"
-                  className="field-control field-control-emphasis"
-                  value={input.project}
-                  placeholder="Kitchen backsplash refresh"
-                  aria-invalid={Boolean(errors.project)}
-                  aria-describedby="project-help project-error"
-                  ref={(node) => registerFirstError("project", node)}
-                  onChange={(event) => setProjectName(event.target.value)}
-                />
-                <span id="project-help" className="field-help">
-                  Use the name your client already recognizes.
-                </span>
-                <InputError id="project-error" message={errors.project} />
-              </label>
-
-              <label className="field-label">
-                Client
-                <input
-                  className="field-control"
-                  value={input.client}
-                  placeholder="Mira Okonkwo"
-                  autoComplete="name"
-                  aria-invalid={Boolean(errors.client)}
-                  aria-describedby={errors.client ? "client-error" : undefined}
-                  ref={(node) => registerFirstError("client", node)}
-                  onChange={(event) => setTextField("client", event.target.value)}
-                />
-                <InputError id="client-error" message={errors.client} />
-              </label>
-
-              <label className="field-label">
-                Your business
-                <input
-                  className="field-control"
-                  value={input.provider}
-                  placeholder="Greenline Remodeling"
-                  autoComplete="organization"
-                  aria-invalid={Boolean(errors.provider)}
-                  aria-describedby={errors.provider ? "provider-error" : undefined}
-                  ref={(node) => registerFirstError("provider", node)}
-                  onChange={(event) => setTextField("provider", event.target.value)}
-                />
-                <InputError id="provider-error" message={errors.provider} />
-              </label>
-
-              {!isChangeOrder ? (
-                <label className="field-label md:col-span-2">
-                  <span className="field-label-line">
-                    <MapPin className="h-4 w-4" aria-hidden="true" />
-                    Job location <small>Optional</small>
-                  </span>
-                  <input
-                    className="field-control"
-                    value={input.jobLocation}
-                    placeholder="123 Maple Avenue"
-                    autoComplete="street-address"
-                    onChange={(event) => setTextField("jobLocation", event.target.value)}
-                  />
-                </label>
-              ) : null}
-            </div>
-
-            <details className="optional-disclosure">
-              <summary>
-                <span>
-                  Add document and contact details
-                  <small>Title, email, phone, trade, and dates</small>
-                </span>
-                <ChevronDown className="h-5 w-5" aria-hidden="true" />
-              </summary>
-              <div className="optional-disclosure-body grid gap-4 md:grid-cols-2">
-                <label className="field-label md:col-span-2">
-                  Document title
-                  <input
-                    className="field-control"
-                    value={input.documentTitle}
-                    placeholder={titleForProject(input.documentType, input.project) || `${documentLabel} title`}
-                    aria-invalid={Boolean(errors.documentTitle)}
-                    aria-describedby={errors.documentTitle ? "documentTitle-error" : undefined}
-                    ref={(node) => registerFirstError("documentTitle", node)}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      setTextField("documentTitle", event.target.value)
-                    }
-                  />
-                  <InputError id="documentTitle-error" message={errors.documentTitle} />
-                </label>
-
-                <label className="field-label">
-                  Business email <small>Optional</small>
-                  <input
-                    className="field-control"
-                    value={input.businessEmail}
-                    type="email"
-                    placeholder="hello@greenlineremodeling.com"
-                    autoComplete="email"
-                    aria-invalid={Boolean(errors.businessEmail)}
-                    aria-describedby={errors.businessEmail ? "businessEmail-error" : undefined}
-                    ref={(node) => registerFirstError("businessEmail", node)}
-                    onChange={(event) => setTextField("businessEmail", event.target.value)}
-                  />
-                  <InputError id="businessEmail-error" message={errors.businessEmail} />
-                </label>
-
-                <label className="field-label">
-                  Business phone <small>Optional</small>
-                  <input
-                    className="field-control"
-                    value={input.businessPhone}
-                    placeholder="(312) 847-1928"
-                    autoComplete="tel"
-                    onChange={(event) => setTextField("businessPhone", event.target.value)}
-                  />
-                </label>
-
-                <label className="field-label">
-                  Industry
-                  <select
-                    className="field-control"
-                    value={input.industry}
-                    onChange={(event) => setTextField("industry", event.target.value as Industry)}
-                  >
-                    {industries.map((industry) => (
-                      <option key={industry.value} value={industry.value}>
-                        {industry.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {!isChangeOrder ? (
-                  <>
-                    <label className="field-label">
-                      Start date <small>Optional</small>
-                      <input
-                        className="field-control"
-                        type="date"
-                        value={input.startDate}
-                        onChange={(event) => setTextField("startDate", event.target.value)}
-                      />
-                    </label>
-                    <label className="field-label">
-                      Completion target <small>Optional</small>
-                      <input
-                        className="field-control"
-                        type="date"
-                        value={input.endDate}
-                        onChange={(event) => setTextField("endDate", event.target.value)}
-                      />
-                    </label>
-                  </>
-                ) : null}
-              </div>
-            </details>
+            <IntakeContactFields
+              input={input}
+              errors={errors}
+              isChangeOrder={isChangeOrder}
+              setTextField={setTextField}
+              setProjectName={setProjectName}
+              registerFirstError={registerFirstError}
+              setFirstField={(node) => {
+                firstFieldRef.current = node;
+              }}
+            />
           </fieldset>
 
           <fieldset
@@ -1239,112 +863,22 @@ export function ChangeOrderGenerator({
             <GuidedSectionHeader
               number="02"
               title="Describe the work"
-              description="Write it the way you would explain it to the client on site."
+              description="Capture the client request in plain language, then add safeguards only when needed."
               ready={sectionReadiness.scope}
               hasError={sectionErrors.scope}
-              icon={<FileCheck2 className="h-5 w-5" />}
+              icon={ShieldCheck}
             />
-            <div className="guided-fields grid gap-4">
-              <label className="field-label">
-                {activeCopy.primaryScopeLabel}
-                <textarea
-                  className="field-control field-control-emphasis"
-                  value={input.newRequest}
-                  placeholder="Describe the exact work, finish, quantity, and area covered."
-                  aria-invalid={Boolean(errors.newRequest)}
-                  aria-describedby="newRequest-help newRequest-error"
-                  ref={(node) => registerFirstError("newRequest", node)}
-                  onChange={(event) => setTextField("newRequest", event.target.value)}
-                />
-                <span id="newRequest-help" className="field-help">
-                  {activeCopy.primaryScopeHelp}
-                </span>
-                <InputError id="newRequest-error" message={errors.newRequest} />
-              </label>
-
-              {isChangeOrder ? (
-                <label className="field-label">
-                  Original agreed scope
-                  <textarea
-                    className="field-control"
-                    value={input.originalScope}
-                    placeholder="What was included before this request?"
-                    aria-invalid={Boolean(errors.originalScope)}
-                    aria-describedby="originalScope-help originalScope-error"
-                    ref={(node) => registerFirstError("originalScope", node)}
-                    onChange={(event) => setTextField("originalScope", event.target.value)}
-                  />
-                  <span id="originalScope-help" className="field-help">
-                    This makes the boundary between approved and added work easy to see.
-                  </span>
-                  <InputError id="originalScope-error" message={errors.originalScope} />
-                </label>
-              ) : null}
-            </div>
-
-            <details className="optional-disclosure">
-              <summary>
-                <span>
-                  Add schedule and safeguards
-                  <small>Timing, exclusions, responsibilities, and policies</small>
-                </span>
-                <ChevronDown className="h-5 w-5" aria-hidden="true" />
-              </summary>
-              <div className="optional-disclosure-body grid gap-4">
-                <label className="field-label">
-                  {isChangeOrder ? "Schedule impact" : "Schedule notes"} <small>Optional</small>
-                  <textarea
-                    className="field-control"
-                    value={input.scheduleImpact}
-                    placeholder="Adds one workday after materials arrive."
-                    onChange={(event) => setTextField("scheduleImpact", event.target.value)}
-                  />
-                </label>
-
-                <label className="field-label">
-                  Exclusions and scope boundary <small>Optional</small>
-                  <textarea
-                    className="field-control"
-                    value={input.exclusions}
-                    placeholder="List work, materials, permits, or hidden conditions that are not included."
-                    onChange={(event) => setTextField("exclusions", event.target.value)}
-                  />
-                </label>
-
-                {!isChangeOrder ? (
-                  <label className="field-label">
-                    Client responsibilities <small>Optional</small>
-                    <textarea
-                      className="field-control"
-                      value={input.clientResponsibilities}
-                      placeholder="Site access, final selections, approvals, or owner-supplied materials."
-                      onChange={(event) => setTextField("clientResponsibilities", event.target.value)}
-                    />
-                  </label>
-                ) : null}
-
-                {isServiceAgreement ? (
-                  <>
-                    <label className="field-label">
-                      Change policy
-                      <textarea
-                        className="field-control"
-                        value={input.changePolicy}
-                        onChange={(event) => setTextField("changePolicy", event.target.value)}
-                      />
-                    </label>
-                    <label className="field-label">
-                      Cancellation language
-                      <textarea
-                        className="field-control"
-                        value={input.cancellationTerms}
-                        onChange={(event) => setTextField("cancellationTerms", event.target.value)}
-                      />
-                    </label>
-                  </>
-                ) : null}
-              </div>
-            </details>
+            <IntakeScopeFields
+              input={input}
+              errors={errors}
+              isChangeOrder={isChangeOrder}
+              isServiceAgreement={isServiceAgreement}
+              scopeKicker={activeCopy.scopeKicker}
+              primaryScopeLabel={activeCopy.primaryScopeLabel}
+              primaryScopeHelp={activeCopy.primaryScopeHelp}
+              setTextField={setTextField}
+              registerFirstError={registerFirstError}
+            />
           </fieldset>
 
           <fieldset
@@ -1356,131 +890,21 @@ export function ChangeOrderGenerator({
             <GuidedSectionHeader
               number="03"
               title="Price it once"
-              description="The total recalculates immediately. No separate calculator needed."
+              description="Enter the numbers you already know. The client total updates as you type."
               ready={sectionReadiness.price}
               hasError={sectionErrors.price}
-              icon={<CircleDollarSign className="h-5 w-5" />}
+              icon={CircleDollarSign}
             />
-            <div className="guided-fields pricing-fields grid gap-4 md:grid-cols-2">
-              <label className="field-label">
-                Currency
-                <select
-                  className="field-control"
-                  value={input.currency}
-                  onChange={(event) => setTextField("currency", event.target.value)}
-                >
-                  {currencies.map((currency) => (
-                    <option key={currency.value} value={currency.value}>
-                      {currency.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="field-label">
-                {isChangeOrder ? "Extra labor hours" : "Labor hours"}
-                <input
-                  className="field-control"
-                  type="number"
-                  min="0"
-                  step="0.25"
-                  inputMode="decimal"
-                  value={input.laborHours}
-                  aria-invalid={Boolean(errors.laborHours)}
-                  aria-describedby={errors.laborHours ? "laborHours-error" : undefined}
-                  onChange={(event) => setNumberField("laborHours", event.target.value)}
-                />
-                <InputError id="laborHours-error" message={errors.laborHours} />
-              </label>
-
-              <label className="field-label">
-                Hourly rate
-                <input
-                  className="field-control"
-                  type="number"
-                  min="0"
-                  step="1"
-                  inputMode="decimal"
-                  value={input.hourlyRate}
-                  aria-invalid={Boolean(errors.hourlyRate)}
-                  aria-describedby={errors.hourlyRate ? "hourlyRate-error" : undefined}
-                  onChange={(event) => setNumberField("hourlyRate", event.target.value)}
-                />
-                <InputError id="hourlyRate-error" message={errors.hourlyRate} />
-              </label>
-
-              <label className="field-label">
-                Materials and direct costs
-                <input
-                  className="field-control"
-                  type="number"
-                  min="0"
-                  step="1"
-                  inputMode="decimal"
-                  value={input.materialsCost}
-                  aria-invalid={Boolean(errors.materialsCost)}
-                  aria-describedby={errors.materialsCost ? "materialsCost-error" : undefined}
-                  onChange={(event) => setNumberField("materialsCost", event.target.value)}
-                />
-                <InputError id="materialsCost-error" message={errors.materialsCost} />
-              </label>
-            </div>
-
-            <div className="pricing-live-strip" aria-live="polite">
-              <div>
-                <Calculator className="h-5 w-5" aria-hidden="true" />
-                <span>
-                  <small>Labor + costs + adjustments</small>
-                  <strong>Client total</strong>
-                </span>
-              </div>
-              <strong>{formatMoney(generated.breakdown.total, input.currency)}</strong>
-            </div>
-
-            <details className="optional-disclosure">
-              <summary>
-                <span>
-                  Adjust margin or rush pricing
-                  <small>Use only when the job calls for it</small>
-                </span>
-                <ChevronDown className="h-5 w-5" aria-hidden="true" />
-              </summary>
-              <div className="optional-disclosure-body grid gap-4 md:grid-cols-2">
-                <label className="field-label">
-                  Margin/overhead %
-                  <input
-                    className="field-control"
-                    type="number"
-                    min="0"
-                    max="80"
-                    step="1"
-                    inputMode="decimal"
-                    value={input.marginPercent}
-                    aria-invalid={Boolean(errors.marginPercent)}
-                    aria-describedby={errors.marginPercent ? "marginPercent-error" : undefined}
-                    onChange={(event) => setNumberField("marginPercent", event.target.value)}
-                  />
-                  <InputError id="marginPercent-error" message={errors.marginPercent} />
-                </label>
-
-                <label className="field-label">
-                  Rush/disruption %
-                  <input
-                    className="field-control"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="1"
-                    inputMode="decimal"
-                    value={input.rushPercent}
-                    aria-invalid={Boolean(errors.rushPercent)}
-                    aria-describedby={errors.rushPercent ? "rushPercent-error" : undefined}
-                    onChange={(event) => setNumberField("rushPercent", event.target.value)}
-                  />
-                  <InputError id="rushPercent-error" message={errors.rushPercent} />
-                </label>
-              </div>
-            </details>
+            <IntakePricingFields
+              input={input}
+              total={generated.breakdown.total}
+              isChangeOrder={isChangeOrder}
+              errors={errors}
+              setTextField={setTextField}
+              numberFieldValue={numberFieldValue}
+              setNumberField={setNumberField}
+              normalizeNumberField={normalizeNumberField}
+            />
           </fieldset>
 
           <fieldset
@@ -1492,74 +916,20 @@ export function ChangeOrderGenerator({
             <GuidedSectionHeader
               number="04"
               title="Set the handoff"
-              description="Tell the client what is due now and when you need an answer."
+              description="Tell the client what is due and when you need an answer."
               ready={sectionReadiness.approval}
               hasError={sectionErrors.approval}
-              icon={<CalendarClock className="h-5 w-5" />}
+              icon={CalendarClock}
             />
-            <div className="guided-fields grid gap-4 md:grid-cols-2">
-              <label className="field-label md:col-span-2">
-                Payment timing
-                <select
-                  className="field-control"
-                  value={input.paymentTiming}
-                  onChange={(event) =>
-                    setTextField("paymentTiming", event.target.value as PaymentTiming)
-                  }
-                >
-                  {paymentTimings.map((timing) => (
-                    <option key={timing.value} value={timing.value}>
-                      {timing.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="field-label">
-                Deposit %
-                <input
-                  className="field-control"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  inputMode="decimal"
-                  value={input.depositPercent}
-                  aria-invalid={Boolean(errors.depositPercent)}
-                  aria-describedby="deposit-help depositPercent-error"
-                  onChange={(event) => setNumberField("depositPercent", event.target.value)}
-                />
-                <span id="deposit-help" className="field-help">
-                  {formatMoney(generated.breakdown.depositAmount, input.currency)} due before work
-                </span>
-                <InputError id="depositPercent-error" message={errors.depositPercent} />
-              </label>
-
-              <label className="field-label">
-                Approval deadline
-                <input
-                  className="field-control"
-                  type="date"
-                  value={input.approvalDeadline}
-                  onChange={(event) => setTextField("approvalDeadline", event.target.value)}
-                />
-              </label>
-
-              <label className="field-label md:col-span-2">
-                Client email tone
-                <select
-                  className="field-control"
-                  value={input.tone}
-                  onChange={(event) => setTextField("tone", event.target.value as Tone)}
-                >
-                  {tones.map((tone) => (
-                    <option key={tone.value} value={tone.value}>
-                      {tone.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <IntakeTermsFields
+              input={input}
+              depositAmount={generated.breakdown.depositAmount}
+              errors={errors}
+              setTextField={setTextField}
+              numberFieldValue={numberFieldValue}
+              setNumberField={setNumberField}
+              normalizeNumberField={normalizeNumberField}
+            />
           </fieldset>
 
           <div className="guided-form-actions">
@@ -1568,170 +938,45 @@ export function ChangeOrderGenerator({
               <span>Review it, then come back to change any detail.</span>
             </div>
             <div className="guided-form-action-buttons">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={saveToAccount}
-                disabled={isSaving}
-              >
-                <Save className="h-5 w-5" aria-hidden="true" />
-                {isSaving ? "Saving draft" : currentOrderId ? "Save changes" : "Save draft"}
-              </button>
-              <button type="submit" className="btn btn-primary">
-                Review {documentLabelLower}
-                <ArrowRight className="h-5 w-5" aria-hidden="true" />
-              </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={saveToAccount}
+              disabled={isSaving}
+            >
+              <Save className="h-5 w-5" aria-hidden="true" />
+              {isSaving ? "Saving draft" : currentOrderId ? "Save changes" : "Save draft"}
+            </button>
+            <button type="submit" className="btn btn-primary">
+              Review {documentLabelLower}
+              <ArrowRight className="h-5 w-5" aria-hidden="true" />
+            </button>
             </div>
           </div>
         </form>
 
-        <section ref={outputRef} className="utility-panel output-workspace print-area p-4 sm:p-5 xl:sticky xl:top-24 xl:self-start">
-          <div className="no-print mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="panel-kicker">
-                <FileText className="h-4 w-4" aria-hidden="true" />
-                Live client view
-              </p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--ink)]">
-                This is what your client sees.
-              </h2>
-            </div>
-            <div className="live-preview-status">
-              <span aria-hidden="true" />
-              Updates as you type
-            </div>
-          </div>
-
-          <div className="no-print grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                Labor
-              </span>
-              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
-                {formatMoney(generated.breakdown.labor, input.currency)}
-              </strong>
-            </div>
-            <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                Materials
-              </span>
-              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
-                {formatMoney(generated.breakdown.materials, input.currency)}
-              </strong>
-            </div>
-            <div className="metric-box">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                Deposit
-              </span>
-              <strong className="mt-2 block font-mono text-2xl text-[var(--ink)]">
-                {formatMoney(generated.breakdown.depositAmount, input.currency)}
-              </strong>
-            </div>
-            <div className="metric-box metric-box-total">
-              <span className="block text-xs font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                Total
-              </span>
-              <strong className="mt-2 block font-mono text-3xl text-[var(--accent-strong)]">
-                {formatMoney(generated.breakdown.total, input.currency)}
-              </strong>
-            </div>
-          </div>
-
-          <div className="no-print mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Output type">
-            {outputModes.map((mode) => (
-              <button
-                key={mode.value}
-                type="button"
-                className={outputMode === mode.value ? "segment segment-active" : "segment"}
-                onClick={() => setOutputMode(mode.value)}
-                role="tab"
-                aria-selected={outputMode === mode.value}
-              >
-                {mode.value === "email" ? <Mail className="h-4 w-4" aria-hidden="true" /> : null}
-                {mode.label}
-              </button>
-            ))}
-          </div>
-
-          {outputMode === "document" ? (
-            <PrintableDocument input={input} generated={generated} />
-          ) : (
-            <div
-              className="document-preview mt-5"
-              tabIndex={0}
-              aria-label={`Generated ${documentLabelLower} output`}
-            >
-              {selectedOutput}
-            </div>
-          )}
-
-          <div className="output-actions no-print mt-5 flex flex-wrap gap-3">
-            <button type="button" className="btn btn-primary" onClick={copyDocument}>
-              <Copy className="h-5 w-5" aria-hidden="true" />
-              Copy client text
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={downloadText}>
-              <Download className="h-5 w-5" aria-hidden="true" />
-              Download text
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={printDocument}>
-              <Printer className="h-5 w-5" aria-hidden="true" />
-              Print / PDF
-            </button>
-            {kitState.configured ? (
-              <a
-                className="btn btn-secondary"
-                href={kitState.href}
-                target="_blank"
-                rel="noreferrer"
-                onClick={handleKitClick}
-              >
-                <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                Template kit
-              </a>
-            ) : null}
-            {paymentState.configured ? (
-              <a
-                className="btn btn-secondary"
-                href={paymentState.href}
-                target="_blank"
-                rel="noreferrer"
-                onClick={handlePaymentClick}
-              >
-                <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                {paymentState.label}
-              </a>
-            ) : null}
-          </div>
-
-          <div aria-live="polite" className="no-print mt-3 min-h-6 text-sm font-bold text-[var(--accent-strong)]">
-            {toast}
-          </div>
-
-          <div className="document-legal-note no-print">
-            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>
-              {isServiceAgreement
-                ? "Service agreement starter only. Have legal terms reviewed for your location, trade, and licensing rules."
-                : "Business template only. Review your contract and local laws before using late fees, interest, liens, or legal escalation."}
-            </span>
-          </div>
-
-          <div className="no-print mt-5 border-t border-[var(--border)] pt-5">
-            <h3 className="flex items-center gap-2 text-base font-black text-[var(--ink)]">
-              <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" aria-hidden="true" />
-              Before sending
-            </h3>
-            <ul className="mt-3 grid gap-2 text-sm leading-6 text-[var(--ink-soft)]">
-              {generated.checklist.map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
+        <OutputPanel
+          outputRef={outputRef}
+          input={input}
+          generated={generated}
+          outputMode={outputMode}
+          setOutputMode={setOutputMode}
+          hasBlankOutput={hasBlankOutput}
+          selectedOutput={selectedOutput}
+          documentLabelLower={documentLabelLower}
+          actionGridClass={actionGridClass}
+          copyDocument={copyDocument}
+          downloadText={downloadText}
+          printDocument={printDocument}
+          showKitUpsell={showKitUpsell}
+          kitHref={kitState.href}
+          handleKitClick={handleKitClick}
+          showPilotUpsell={showPilotUpsell}
+          pilotHref={pilotState.href}
+          pilotLabel={pilotState.label}
+          handlePilotClick={handlePilotClick}
+          toast={toast}
+        />
       </div>
     </section>
   );

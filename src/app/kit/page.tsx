@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 
 export default function KitPage() {
   const kitState = getTemplateKitState(process.env.NEXT_PUBLIC_TEMPLATE_KIT_LINK);
+  const showUpsells = process.env.NEXT_PUBLIC_SHOW_UPSELLS === "true";
 
   return (
     <section className="tool-shell py-8 sm:py-10">
@@ -26,17 +27,12 @@ export default function KitPage() {
             delivery, so ChangeOrderKit does not process payments or store purchase records.
           </p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            {kitState.configured ? (
+            {showUpsells && kitState.configured ? (
               <a className="btn btn-primary" href={kitState.href} target="_blank" rel="noreferrer">
                 <ExternalLink className="h-5 w-5" aria-hidden="true" />
                 {kitState.label}
               </a>
-            ) : (
-              <button className="btn btn-disabled" type="button">
-                <ExternalLink className="h-5 w-5" aria-hidden="true" />
-                {kitState.label}
-              </button>
-            )}
+            ) : null}
             <Link className="btn btn-secondary" href="/">
               <FileText className="h-5 w-5" aria-hidden="true" />
               Use free generator
