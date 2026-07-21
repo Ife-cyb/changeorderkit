@@ -45,12 +45,14 @@ export function outputFilename(mode: OutputMode, documentType: DocumentType) {
   return names[mode];
 }
 
-function PrintableDocument({
+export function PrintableDocument({
   input,
-  generated
+  generated,
+  preview = false
 }: {
   input: ChangeOrderInput;
   generated: GeneratedChangeOrder;
+  preview?: boolean;
 }) {
   const isChangeOrder = input.documentType === "change-order";
   const isServiceAgreement = input.documentType === "service-agreement";
@@ -108,15 +110,17 @@ function PrintableDocument({
         <p>{input.newRequest || "Scope of work not provided."}</p>
       </section>
 
-      <section>
-        <h3>{isChangeOrder ? "Schedule impact" : "Schedule"}</h3>
-        <p>
-          {input.scheduleImpact ||
-            (input.startDate || input.endDate
-              ? `${input.startDate || "Start TBD"} to ${input.endDate || "completion TBD"}`
-              : "Schedule will be confirmed after approval.")}
-        </p>
-      </section>
+      {!preview ? (
+        <section>
+          <h3>{isChangeOrder ? "Schedule impact" : "Schedule"}</h3>
+          <p>
+            {input.scheduleImpact ||
+              (input.startDate || input.endDate
+                ? `${input.startDate || "Start TBD"} to ${input.endDate || "completion TBD"}`
+                : "Schedule will be confirmed after approval.")}
+          </p>
+        </section>
+      ) : null}
 
       {!isChangeOrder ? (
         <section>
@@ -161,7 +165,7 @@ function PrintableDocument({
         </dl>
       </section>
 
-      {isServiceAgreement ? (
+      {isServiceAgreement && !preview ? (
         <>
           <section>
             <h3>Changes to scope</h3>
@@ -174,37 +178,41 @@ function PrintableDocument({
         </>
       ) : null}
 
-      <section>
-        <h3>Payment terms</h3>
-        <p>{generated.paymentTerms}</p>
-      </section>
+      {!preview ? (
+        <>
+          <section>
+            <h3>Payment terms</h3>
+            <p>{generated.paymentTerms}</p>
+          </section>
 
-      <section>
-        <h3>Scope boundary</h3>
-        <p>{input.exclusions || "No additional exclusions listed."}</p>
-        <p>{generated.approvalText}</p>
-        {isServiceAgreement ? (
-          <p>
-            This service agreement starter is a business template, not legal advice. Have legal
-            terms reviewed for your location and trade.
-          </p>
-        ) : null}
-      </section>
+          <section>
+            <h3>Scope boundary</h3>
+            <p>{input.exclusions || "No additional exclusions listed."}</p>
+            <p>{generated.approvalText}</p>
+            {isServiceAgreement ? (
+              <p>
+                This service agreement starter is a business template, not legal advice. Have legal
+                terms reviewed for your location and trade.
+              </p>
+            ) : null}
+          </section>
 
-      <section className="signature-grid">
-        <div>
-          <span>Client name</span>
-          <i />
-        </div>
-        <div>
-          <span>Signature</span>
-          <i />
-        </div>
-        <div>
-          <span>Date</span>
-          <i />
-        </div>
-      </section>
+          <section className="signature-grid">
+            <div>
+              <span>Client name</span>
+              <i />
+            </div>
+            <div>
+              <span>Signature</span>
+              <i />
+            </div>
+            <div>
+              <span>Date</span>
+              <i />
+            </div>
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }

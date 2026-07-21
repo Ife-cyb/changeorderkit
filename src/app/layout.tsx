@@ -83,15 +83,52 @@ export default async function RootLayout({
         </header>
         <main id="main">{children}</main>
         <footer className="app-footer no-print">
-          <div className="tool-shell flex justify-end py-8 text-sm">
-            <div className="flex gap-4 font-bold">
+          <div className="tool-shell app-footer-grid">
+            <div className="app-footer-brand">
+              <Link href="/" className="text-lg font-black tracking-tight text-[var(--ink)]">
+                ChangeOrderKit
+              </Link>
+              <p>Price extra work, write the approval request, and keep the project record clear.</p>
+            </div>
+            <nav aria-label="Product links">
+              <p className="app-footer-heading">Product</p>
+              <Link href="/#generator" className="footer-link">
+                Create a document
+              </Link>
+              <Link href="/dashboard" className="footer-link">
+                Dashboard
+              </Link>
+              {isSignedIn ? (
+                <Link href="/settings" className="footer-link">
+                  Settings
+                </Link>
+              ) : (
+                <Link href="/sign-in" className="footer-link">
+                  Sign in
+                </Link>
+              )}
+            </nav>
+            <nav aria-label="Resource links">
+              <p className="app-footer-heading">Resources</p>
+              <Link href="/remodeling-change-orders" className="footer-link">
+                For remodelers
+              </Link>
+              <Link href="/change-order-template" className="footer-link">
+                Change order template
+              </Link>
+              <Link href="/scope-creep-email-generator" className="footer-link">
+                Scope email
+              </Link>
+            </nav>
+            <nav aria-label="Legal links">
+              <p className="app-footer-heading">Legal</p>
               <Link href="/privacy" className="footer-link">
                 Privacy
               </Link>
               <Link href="/terms" className="footer-link">
                 Terms
               </Link>
-            </div>
+            </nav>
           </div>
         </footer>
         <Analytics />
