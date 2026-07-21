@@ -70,6 +70,7 @@ Shadows are tinted toward the green-neutral background. No pure-black drop shado
 - Container: `width: min(1400px, calc(100% - 32px)); margin: 0 auto`
 - Reading width: `max-w-[65ch]`
 - Hero pattern: left-aligned tool intro with dark live ledger rail; never centered-only
+- Generator pattern: one-page guided desk in the user’s natural sequence — Job, Scope, Price, Approval — with optional supporting detail disclosed in place
 - Dashboard pattern: divided rows inside one workspace panel, not repeated generic cards
 - SEO pages: article intro plus divided workflow rows, not three equal feature cards
 - Mobile: single-column grids below `md`, 44px minimum controls
@@ -82,6 +83,9 @@ Shadows are tinted toward the green-neutral background. No pure-black drop shado
 - `btn`, `btn-primary`, `btn-secondary`, `btn-disabled`
 - `field-control`
 - `segment` and `segment-active`
+- `guided-form`, `form-progress`, and `guided-form-section`
+- `optional-disclosure` for non-blocking contact, schedule, safeguard, and pricing adjustments
+- `pricing-live-strip` for the immediate price “aha” moment
 - `print-document`
 
 ## Project-Specific Bans
@@ -108,4 +112,5 @@ Shadows are tinted toward the green-neutral background. No pure-black drop shado
 
 ## Last Updated
 
-2026-07-08 by frontend-god-mode redesign: established industrial premium workspace tokens, ledger rail pattern, dashboard rows, auth redesign, and SEO/support page system.
+- 2026-07-08 by frontend-god-mode redesign: established industrial premium workspace tokens, ledger rail pattern, dashboard rows, auth redesign, and SEO/support page system.
+- 2026-07-21 by guided form UX refinement: ordered the generator around Job → Scope → Price → Approval, added progressive disclosure, live readiness, blank/example onboarding, inline recovery, and a mobile-first handoff.

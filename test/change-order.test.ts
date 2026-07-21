@@ -99,13 +99,14 @@ describe("validation", () => {
     const errors = validateChangeOrder({
       ...defaultInput,
       documentTitle: "",
+      project: "",
       provider: "",
       client: "",
       originalScope: "",
       newRequest: ""
     });
 
-    expect(errors.documentTitle).toBeTruthy();
+    expect(errors.project).toBeTruthy();
     expect(errors.provider).toBeTruthy();
     expect(errors.client).toBeTruthy();
     expect(errors.originalScope).toBeTruthy();
