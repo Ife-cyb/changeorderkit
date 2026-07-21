@@ -53,6 +53,7 @@ type Props = {
   isSignedIn?: boolean;
   businessProfile?: BusinessProfile | null;
   useLocalDraft?: boolean;
+  headingLevel?: "h1" | "h2";
 };
 
 const storageKey = "changeorderkit:draft:v2";
@@ -222,7 +223,8 @@ export function ChangeOrderGenerator({
   savedOrderId,
   isSignedIn = false,
   businessProfile,
-  useLocalDraft = true
+  useLocalDraft = true,
+  headingLevel = "h1"
 }: Props) {
   const router = useRouter();
   const [input, setInput] = useState<ChangeOrderInput>(() =>
@@ -276,6 +278,7 @@ export function ChangeOrderGenerator({
       : approvalUrgency === "soon"
         ? "text-[var(--warning)]"
         : "text-[var(--ink)]";
+  const HeroHeading = headingLevel;
 
   useEffect(() => {
     if (!viewedTrackedRef.current) {
@@ -576,16 +579,16 @@ export function ChangeOrderGenerator({
   }
 
   return (
-    <section id="generator" className="tool-shell scroll-mt-6 py-5 sm:py-10" aria-label="Document generator">
+    <section id="generator" className="tool-shell scroll-mt-24 py-5 sm:py-10" aria-label="Document generator">
       <div className="mb-4 grid gap-4 sm:mb-6 sm:gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.45fr)] lg:items-end">
         <div>
           <p className="panel-kicker mb-3">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
             Document generator
           </p>
-          <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight text-[var(--ink)] sm:text-5xl lg:text-7xl">
+          <HeroHeading className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight text-[var(--ink)] sm:text-5xl lg:text-7xl">
             {activeCopy.hero}
-          </h1>
+          </HeroHeading>
           <p className="mt-3 max-w-[65ch] text-lg leading-8 text-[var(--ink-soft)] sm:mt-5">
             {activeCopy.dek}
           </p>

@@ -11,6 +11,7 @@ export const funnelEvents = {
   formCleared: "form_cleared",
   pilotCtaClicked: "pilot_cta_clicked",
   pilotLinkMissing: "pilot_link_missing",
+  homeLandingCtaClicked: "home_landing_cta_clicked",
   remodelingLandingCtaClicked: "remodeling_landing_cta_clicked"
 } as const;
 
