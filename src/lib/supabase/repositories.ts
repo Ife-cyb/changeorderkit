@@ -28,7 +28,13 @@ export function createSupabaseChangeOrderRepository(
         .maybeSingle();
     },
     async delete(userId: string, id: string) {
-      return supabase.from("change_orders").delete().eq("id", id).eq("user_id", userId);
+      return supabase
+        .from("change_orders")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select("*")
+        .maybeSingle();
     }
   };
 }

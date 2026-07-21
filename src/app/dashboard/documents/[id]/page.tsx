@@ -24,6 +24,11 @@ export default async function SavedDocumentPage({
 }) {
   const { id } = await params;
   const { type } = await searchParams;
+  const documentType = id === "new" ? sanitizeDocumentType(type) : null;
+  const requestedPath =
+    id === "new" && documentType
+      ? `/dashboard/documents/new?type=${encodeURIComponent(documentType)}`
+      : `/dashboard/documents/${id}`;
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
@@ -34,18 +39,29 @@ export default async function SavedDocumentPage({
   const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : "";
 
   if (claimsError || !userId) {
-    redirect(`/sign-in?next=${encodeURIComponent(`/dashboard/documents/${id}`)}`);
+    redirect(`/sign-in?next=${encodeURIComponent(requestedPath)}`);
   }
 
-  const { data: profileRow } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+  const { data: profileRow, error: profileError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error("Document editor profile query failed.", {
+      code: profileError.code,
+      message: profileError.message
+    });
+    throw new Error("The business profile could not be loaded.");
+  }
+
   const profile = profileFromRow(profileRow);
 
   if (id === "new") {
-    const documentType = sanitizeDocumentType(type);
-
     return (
       <ChangeOrderGenerator
-        initialInput={createDefaultInput(profile ?? undefined, documentType)}
+        initialInput={createDefaultInput(profile ?? undefined, documentType ?? "change-order")}
         isSignedIn
         businessProfile={profile}
         useLocalDraft={false}
@@ -56,12 +72,20 @@ export default async function SavedDocumentPage({
     );
   }
 
-  const { data: orderRow } = await supabase
+  const { data: orderRow, error: orderError } = await supabase
     .from("change_orders")
     .select("*")
     .eq("id", id)
     .eq("user_id", userId)
     .maybeSingle();
+
+  if (orderError) {
+    console.error("Document editor record query failed.", {
+      code: orderError.code,
+      message: orderError.message
+    });
+    throw new Error("The saved document could not be loaded.");
+  }
 
   if (!orderRow) {
     notFound();

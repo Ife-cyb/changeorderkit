@@ -12,7 +12,11 @@ export function getSupabaseConfig(): SupabasePublicConfig | null {
   }
 
   try {
-    new URL(url);
+    const parsedUrl = new URL(url);
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return null;
+    }
   } catch {
     return null;
   }

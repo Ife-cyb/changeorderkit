@@ -2,7 +2,8 @@ import {
   type ChangeOrderInput,
   type ChangeOrderStatus,
   type SavedChangeOrder,
-  sanitizeChangeOrderInput
+  sanitizeChangeOrderInput,
+  validateChangeOrder
 } from "@/lib/change-order";
 import {
   type ChangeOrderInsert,
@@ -30,7 +31,7 @@ export type ChangeOrderRepository = {
     payload: ChangeOrderUpdate
   ): Promise<RepositoryResult<ChangeOrderRow>>;
   get(userId: string, id: string): Promise<RepositoryResult<ChangeOrderRow>>;
-  delete(userId: string, id: string): Promise<RepositoryResult<null>>;
+  delete(userId: string, id: string): Promise<RepositoryResult<ChangeOrderRow>>;
 };
 
 export type ChangeOrderActionResult =
@@ -59,24 +60,115 @@ function notFoundError(): ChangeOrderActionResult {
 }
 
 function repositoryError(error: RepositoryError | null): ChangeOrderActionResult {
+  if (error) {
+    console.error("Change order repository request failed.", {
+      message: error.message
+    });
+  }
+
   return {
     ok: false,
-    error: error?.message || "Something went wrong while saving the document."
+    error: "The document request could not be completed. Please try again."
+  };
+}
+
+const requiredStringFields = [
+  "documentTitle",
+  "provider",
+  "client",
+  "project",
+  "newRequest"
+] as const;
+
+const numericFields = [
+  "laborHours",
+  "hourlyRate",
+  "materialsCost",
+  "marginPercent",
+  "rushPercent",
+  "depositPercent"
+] as const;
+
+function prepareInputForSave(value: unknown):
+  | {
+      ok: true;
+      input: ChangeOrderInput;
+    }
+  | {
+      ok: false;
+      error: string;
+    } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      ok: false,
+      error: "The document data is invalid. Reload the page and try again."
+    };
+  }
+
+  const raw = value as Record<string, unknown>;
+  const input = sanitizeChangeOrderInput(value);
+  const stringsToCheck =
+    input.documentType === "change-order"
+      ? [...requiredStringFields, "originalScope" as const]
+      : requiredStringFields;
+
+  if (stringsToCheck.some((field) => typeof raw[field] !== "string")) {
+    return {
+      ok: false,
+      error: "The document data is incomplete. Reload the page and try again."
+    };
+  }
+
+  const validationInput = { ...input };
+
+  for (const field of numericFields) {
+    const value = raw[field];
+
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return {
+        ok: false,
+        error: "The pricing data is invalid. Check the amounts and try again."
+      };
+    }
+
+    validationInput[field] = value;
+  }
+
+  const firstValidationError = Object.values(validateChangeOrder(validationInput)).find(
+    (message): message is string => typeof message === "string"
+  );
+
+  if (firstValidationError) {
+    return {
+      ok: false,
+      error: firstValidationError
+    };
+  }
+
+  return {
+    ok: true,
+    input
   };
 }
 
 export async function saveChangeOrderWithRepository(
   repository: ChangeOrderRepository,
   userId: string | null | undefined,
-  input: ChangeOrderInput,
+  input: unknown,
   id?: string | null
 ): Promise<ChangeOrderActionResult> {
   if (!userId) {
     return authError();
   }
 
+  const prepared = prepareInputForSave(input);
+
+  if (!prepared.ok) {
+    return prepared;
+  }
+
   if (id) {
-    const result = await repository.update(userId, id, buildChangeOrderUpdate(input));
+    const result = await repository.update(userId, id, buildChangeOrderUpdate(prepared.input));
 
     if (result.error) {
       return repositoryError(result.error);
@@ -95,7 +187,7 @@ export async function saveChangeOrderWithRepository(
     };
   }
 
-  const result = await repository.insert(buildChangeOrderInsert(userId, input));
+  const result = await repository.insert(buildChangeOrderInsert(userId, prepared.input));
 
   if (result.error) {
     return repositoryError(result.error);
@@ -166,9 +258,11 @@ export async function duplicateChangeOrderWithRepository(
   }
 
   const originalInput = sanitizeChangeOrderInput(original.data.input, original.data.document_type);
+  const duplicateSuffix = " copy";
+  const duplicateTitle = (originalInput.documentTitle || original.data.title).trim();
   const duplicateInput: ChangeOrderInput = {
     ...originalInput,
-    documentTitle: `${originalInput.documentTitle || original.data.title} copy`
+    documentTitle: `${duplicateTitle.slice(0, 180 - duplicateSuffix.length)}${duplicateSuffix}`
   };
 
   const result = await repository.insert(buildChangeOrderInsert(userId, duplicateInput, "draft"));
@@ -203,6 +297,10 @@ export async function deleteChangeOrderWithRepository(
 
   if (result.error) {
     return repositoryError(result.error);
+  }
+
+  if (!result.data) {
+    return notFoundError();
   }
 
   return {

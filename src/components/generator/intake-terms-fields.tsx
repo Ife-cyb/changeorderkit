@@ -28,6 +28,10 @@ type Props = {
   numberFieldValue: (field: NumericField) => string;
   setNumberField: (field: NumericField, value: string) => void;
   normalizeNumberField: (field: NumericField) => void;
+  registerFirstError: (
+    field: keyof ChangeOrderInput,
+    node: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+  ) => void;
 };
 
 function InputError({ id, message }: { id: string; message?: string }) {
@@ -47,8 +51,12 @@ export function IntakeTermsFields({
   setTextField,
   numberFieldValue,
   setNumberField,
-  normalizeNumberField
+  normalizeNumberField,
+  registerFirstError
 }: Props) {
+  const depositApplies = input.paymentTiming === "deposit-before";
+  const depositError = depositApplies ? errors.depositPercent : undefined;
+
   return (
     <div className="guided-fields grid gap-4 md:grid-cols-2">
       <label className="field-label md:col-span-2">
@@ -76,15 +84,19 @@ export function IntakeTermsFields({
           step="1"
           inputMode="decimal"
           value={numberFieldValue("depositPercent")}
-          aria-invalid={Boolean(errors.depositPercent)}
-          aria-describedby="deposit-help depositPercent-error"
+          disabled={!depositApplies}
+          aria-invalid={Boolean(depositError)}
+          aria-describedby={depositError ? "deposit-help depositPercent-error" : "deposit-help"}
+          ref={(node) => registerFirstError("depositPercent", node)}
           onChange={(event) => setNumberField("depositPercent", event.target.value)}
           onBlur={() => normalizeNumberField("depositPercent")}
         />
         <span id="deposit-help" className="field-help">
-          {formatMoney(depositAmount, input.currency)} due before work
+          {depositApplies
+            ? `${formatMoney(depositAmount, input.currency)} due before work`
+            : "No deposit is applied with this payment timing."}
         </span>
-        <InputError id="depositPercent-error" message={errors.depositPercent} />
+        <InputError id="depositPercent-error" message={depositError} />
       </label>
 
       <label className="field-label">

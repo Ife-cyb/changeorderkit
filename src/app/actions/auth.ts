@@ -1,20 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { safeNextPath } from "@/lib/auth-redirect";
 import { profileToDefaultSettings } from "@/lib/change-order-records";
 import { supabaseSetupMessage } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { defaultBusinessProfile } from "@/lib/change-order";
-
-function safeNextPath(value: FormDataEntryValue | null, fallback = "/dashboard") {
-  const raw = typeof value === "string" ? value : "";
-
-  if (!raw.startsWith("/") || raw.startsWith("//")) {
-    return fallback;
-  }
-
-  return raw;
-}
 
 function search(path: string, values: Record<string, string>) {
   const params = new URLSearchParams(values);
@@ -25,18 +16,37 @@ function siteUrl() {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
 
   try {
-    return new URL(configured || "https://changeorderkit.vercel.app").origin;
+    const url = new URL(configured || "https://changeorderkit.vercel.app");
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("Unsupported site URL protocol");
+    }
+
+    return url.origin;
   } catch {
     return "https://changeorderkit.vercel.app";
   }
 }
 
-function authCallback() {
-  return new URL("/auth/callback", siteUrl()).toString();
+function authCallback(next: string) {
+  const callback = new URL("/auth/callback", siteUrl());
+  callback.searchParams.set("next", safeNextPath(next, "/settings"));
+  return callback.toString();
 }
 
 function recoveryCallback() {
   return new URL("/auth/recovery", siteUrl()).toString();
+}
+
+function logAuthError(
+  operation: string,
+  error: { code?: string; message: string; status?: number }
+) {
+  console.error(`Supabase Auth ${operation} failed.`, {
+    code: error.code,
+    message: error.message,
+    status: error.status
+  });
 }
 
 function friendlySignInError(code: string | undefined, message: string) {
@@ -48,10 +58,10 @@ function friendlySignInError(code: string | undefined, message: string) {
     return "The email or password is not correct. If you created this account before, use the original password or reset it below—creating the account again does not replace its password.";
   }
 
-  return message;
+  return "We could not sign you in. Please try again.";
 }
 
-function friendlyEmailError(code: string | undefined, message: string) {
+function friendlyEmailError(code: string | undefined) {
   if (code === "email_address_not_authorized") {
     return "Email delivery is not available for that address yet. Please try again later.";
   }
@@ -60,7 +70,7 @@ function friendlyEmailError(code: string | undefined, message: string) {
     return "Too many email requests were made. Wait a few minutes, then try again.";
   }
 
-  return message;
+  return "We could not complete the email request. Please try again.";
 }
 
 export async function signInAction(formData: FormData) {
@@ -79,6 +89,7 @@ export async function signInAction(formData: FormData) {
   });
 
   if (error) {
+    logAuthError("sign-in", error);
     redirect(search("/sign-in", { next, error: friendlySignInError(error.code, error.message) }));
   }
 
@@ -103,16 +114,17 @@ export async function signUpAction(formData: FormData) {
     email,
     password,
     options: {
-      emailRedirectTo: authCallback()
+      emailRedirectTo: authCallback(next)
     }
   });
 
   if (error) {
-    redirect(search("/sign-up", { next, error: friendlyEmailError(error.code, error.message) }));
+    logAuthError("sign-up", error);
+    redirect(search("/sign-up", { next, error: friendlyEmailError(error.code) }));
   }
 
   if (data.user && data.session) {
-    await supabase.from("profiles").upsert({
+    const { error: profileError } = await supabase.from("profiles").upsert({
       id: data.user.id,
       email,
       contact_email: email,
@@ -120,6 +132,13 @@ export async function signUpAction(formData: FormData) {
       phone: "",
       default_settings: profileToDefaultSettings(defaultBusinessProfile)
     });
+
+    if (profileError) {
+      console.error("Post-signup profile initialization failed.", {
+        code: profileError.code,
+        message: profileError.message
+      });
+    }
 
     redirect(next);
   }
@@ -150,12 +169,13 @@ export async function resendConfirmationAction(formData: FormData) {
     type: "signup",
     email,
     options: {
-      emailRedirectTo: authCallback()
+      emailRedirectTo: authCallback(next)
     }
   });
 
   if (error) {
-    redirect(search("/sign-in", { next, error: friendlyEmailError(error.code, error.message) }));
+    logAuthError("confirmation resend", error);
+    redirect(search("/sign-in", { next, error: friendlyEmailError(error.code) }));
   }
 
   redirect(
@@ -184,7 +204,8 @@ export async function requestPasswordResetAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(search("/forgot-password", { error: friendlyEmailError(error.code, error.message) }));
+    logAuthError("password-reset request", error);
+    redirect(search("/forgot-password", { error: friendlyEmailError(error.code) }));
   }
 
   redirect(
@@ -215,7 +236,12 @@ export async function updatePasswordAction(formData: FormData) {
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
-    redirect(search("/update-password", { error: error.message }));
+    logAuthError("password update", error);
+    redirect(
+      search("/update-password", {
+        error: "We could not update the password. Request a new recovery link and try again."
+      })
+    );
   }
 
   redirect(search("/settings", { message: "Password updated." }));

@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveChangeOrderAction } from "@/app/actions/change-orders";
 import { DraftSummaryCard } from "@/components/generator/draft-summary-card";
+import { useDeadlineUrgency } from "@/components/deadline-urgency";
 import { GuidedSectionHeader } from "@/components/generator/guided-section-header";
 import { IntakeContactFields } from "@/components/generator/intake-contact-fields";
 import {
@@ -32,7 +33,6 @@ import {
   type BusinessProfile,
   type ChangeOrderInput,
   type DocumentType,
-  deadlineUrgency,
   documentTypeLabel,
   documentTypeOptions,
   createBlankInput,
@@ -46,6 +46,11 @@ import {
   type ValidationErrors
 } from "@/lib/change-order";
 import { funnelEvents, totalBucket } from "@/lib/funnel";
+import {
+  automaticDocumentTitle,
+  saveCompletionState,
+  transitionDocumentType
+} from "@/lib/generator-state";
 import { trackEvent } from "@/lib/tracking";
 
 type GuidedSectionId = "job" | "scope" | "price" | "approval";
@@ -120,11 +125,6 @@ const documentCopy: Record<
     generatedToast: "Service agreement generated."
   }
 };
-
-function titleForProject(documentType: DocumentType, project: string) {
-  const trimmedProject = project.trim();
-  return trimmedProject ? `${documentTypeLabel(documentType)} for ${trimmedProject}` : "";
-}
 
 function parseSavedDraft(value: string | null): LocalDraftRecord | null {
   if (!value) {
@@ -269,6 +269,10 @@ export function ChangeOrderGenerator({
   const toastTimerRef = useRef<number | null>(null);
   const viewedTrackedRef = useRef(false);
   const startedTrackedRef = useRef(false);
+  const editRevisionRef = useRef(0);
+  const savedRevisionRef = useRef(0);
+  const hydratedInputRef = useRef(false);
+  const hydratedOrderIdRef = useRef(savedOrderId ?? "");
   const firstErrorRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(
     null
   );
@@ -310,7 +314,8 @@ export function ChangeOrderGenerator({
           errors.provider ||
           errors.businessEmail ||
           errors.client ||
-          errors.project
+          errors.project ||
+          errors.endDate
       ),
       scope: Boolean(errors.originalScope || errors.newRequest),
       price: Boolean(
@@ -325,7 +330,7 @@ export function ChangeOrderGenerator({
     [errors]
   );
   const hasBlankOutput = !input.provider.trim() && !input.client.trim() && !input.newRequest.trim();
-  const approvalUrgency = deadlineUrgency(input.approvalDeadline);
+  const approvalUrgency = useDeadlineUrgency(input.approvalDeadline);
   const exampleInput = isExampleInput(input);
   const approvalDeadlineClass =
     approvalUrgency === "overdue"
@@ -344,16 +349,36 @@ export function ChangeOrderGenerator({
 
   useEffect(() => {
     const restoreId = window.setTimeout(() => {
+      const nextOrderId = savedOrderId ?? "";
+      const orderChanged =
+        hydratedInputRef.current && hydratedOrderIdRef.current !== nextOrderId;
+      const hasUnsavedEdits = editRevisionRef.current !== savedRevisionRef.current;
+
+      if (!orderChanged && hasUnsavedEdits) {
+        setDraftLoaded(true);
+        hydratedInputRef.current = true;
+        hydratedOrderIdRef.current = nextOrderId;
+        return;
+      }
+
+      if (orderChanged) {
+        editRevisionRef.current = 0;
+        savedRevisionRef.current = 0;
+        setCurrentOrderId(nextOrderId);
+      }
+
       const fallback = createDefaultInput(businessProfile ?? undefined);
       const restored = useLocalDraft ? readSavedDraft() : null;
       setInput(restored?.input ?? sanitizeChangeOrderInput(initialInput ?? fallback));
       setNumericDrafts({});
       setLastSavedAt(restored?.savedAt ?? null);
       setDraftLoaded(true);
+      hydratedInputRef.current = true;
+      hydratedOrderIdRef.current = nextOrderId;
     }, 0);
 
     return () => window.clearTimeout(restoreId);
-  }, [businessProfile, initialInput, useLocalDraft]);
+  }, [businessProfile, initialInput, savedOrderId, useLocalDraft]);
 
   useEffect(() => {
     if (!draftLoaded || !useLocalDraft) {
@@ -425,14 +450,24 @@ export function ChangeOrderGenerator({
 
   function setTextField(field: keyof ChangeOrderInput, value: string) {
     trackFormStarted();
+    editRevisionRef.current += 1;
     setInput((current) => ({ ...current, [field]: value }));
     clearFieldError(field);
+
+    if (field === "paymentTiming" && value !== "deposit-before") {
+      clearFieldError("depositPercent");
+    }
+
+    if (field === "startDate") {
+      clearFieldError("endDate");
+    }
   }
 
   function setProjectName(value: string) {
     trackFormStarted();
+    editRevisionRef.current += 1;
     setInput((current) => {
-      const currentAutoTitle = titleForProject(current.documentType, current.project);
+      const currentAutoTitle = automaticDocumentTitle(current.documentType, current.project);
       const knownDefaultTitles = documentTypeOptions.map(
         (option) => createDefaultInput(undefined, option.value).documentTitle
       );
@@ -445,7 +480,7 @@ export function ChangeOrderGenerator({
         ...current,
         project: value,
         documentTitle: shouldUpdateTitle
-          ? titleForProject(current.documentType, value)
+          ? automaticDocumentTitle(current.documentType, value)
           : current.documentTitle
       };
     });
@@ -462,41 +497,19 @@ export function ChangeOrderGenerator({
   }
 
   function setDocumentType(value: DocumentType) {
-    trackFormStarted();
-    setInput((current) => {
-      const nextDefault = createDefaultInput(businessProfile ?? undefined, value);
-      const defaults = documentTypeOptions.map((option) => createDefaultInput(undefined, option.value));
-      const shouldReplace = (field: keyof ChangeOrderInput) =>
-        typeof current[field] === "string" &&
-        (!String(current[field]).trim() ||
-          defaults.some((defaultValue) => defaultValue[field] === current[field]));
+    if (input.documentType === value) {
+      return;
+    }
 
-      return {
-        ...current,
-        documentType: value,
-        documentTitle: shouldReplace("documentTitle") ? nextDefault.documentTitle : current.documentTitle,
-        originalScope: shouldReplace("originalScope") ? nextDefault.originalScope : current.originalScope,
-        newRequest: shouldReplace("newRequest") ? nextDefault.newRequest : current.newRequest,
-        scheduleImpact: shouldReplace("scheduleImpact")
-          ? nextDefault.scheduleImpact
-          : current.scheduleImpact,
-        startDate: current.startDate || nextDefault.startDate,
-        endDate: current.endDate || nextDefault.endDate,
-        clientResponsibilities: shouldReplace("clientResponsibilities")
-          ? nextDefault.clientResponsibilities
-          : current.clientResponsibilities,
-        exclusions: shouldReplace("exclusions") ? nextDefault.exclusions : current.exclusions,
-        changePolicy: shouldReplace("changePolicy") ? nextDefault.changePolicy : current.changePolicy,
-        cancellationTerms: shouldReplace("cancellationTerms")
-          ? nextDefault.cancellationTerms
-          : current.cancellationTerms
-      };
-    });
+    trackFormStarted();
+    editRevisionRef.current += 1;
+    setInput((current) => transitionDocumentType(current, value, businessProfile));
     setErrors({});
   }
 
   function setNumberField(field: NumericField, value: string) {
     trackFormStarted();
+    editRevisionRef.current += 1;
     setNumericDrafts((current) => ({ ...current, [field]: value }));
     const parsed = Number.parseFloat(value);
     setInput((current) => ({ ...current, [field]: Number.isFinite(parsed) ? parsed : 0 }));
@@ -530,7 +543,14 @@ export function ChangeOrderGenerator({
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
-      window.setTimeout(() => firstErrorRef.current?.focus(), 0);
+      window.setTimeout(() => {
+        const firstInvalidField =
+          firstErrorRef.current ??
+          intakeRef.current?.querySelector<
+            HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+          >('[aria-invalid="true"]');
+        firstInvalidField?.focus();
+      }, 0);
       return false;
     }
 
@@ -571,24 +591,47 @@ export function ChangeOrderGenerator({
       return;
     }
 
+    const revisionAtSave = editRevisionRef.current;
+
     startSaving(async () => {
-      const result = await saveChangeOrderAction(input, currentOrderId || null);
+      try {
+        const result = await saveChangeOrderAction(input, currentOrderId || null);
 
-      if (!result.ok) {
-        showToast(result.error);
-        return;
-      }
-
-      if (result.id) {
-        setCurrentOrderId(result.id);
-
-        if (window.location.pathname.endsWith("/new")) {
-          router.replace(`/dashboard/documents/${result.id}`);
+        if (!result.ok) {
+          showToast(result.error);
+          return;
         }
-      }
 
-      showToast(`${documentLabel} saved.`);
-      trackEvent("document_saved", { document_type: input.documentType, industry: input.industry });
+        savedRevisionRef.current = revisionAtSave;
+        const { hasNewerEdits, shouldNavigateToSavedDocument } = saveCompletionState(
+          revisionAtSave,
+          editRevisionRef.current
+        );
+
+        if (result.id) {
+          setCurrentOrderId(result.id);
+
+          if (
+            window.location.pathname.endsWith("/new") &&
+            shouldNavigateToSavedDocument
+          ) {
+            router.replace(`/dashboard/documents/${result.id}`);
+          }
+        }
+
+        showToast(
+          hasNewerEdits
+            ? `${documentLabel} saved. Newer edits are still unsaved—save again.`
+            : `${documentLabel} saved.`
+        );
+        trackEvent("document_saved", {
+          document_type: input.documentType,
+          industry: input.industry,
+          newer_edits: hasNewerEdits
+        });
+      } catch {
+        showToast("Save failed. Your edits are still here—check your connection and try again.");
+      }
     });
   }
 
@@ -653,6 +696,7 @@ export function ChangeOrderGenerator({
 
   function resetDraft() {
     clearSavedDraft();
+    editRevisionRef.current += 1;
     setInput(createDefaultInput(businessProfile ?? undefined, input.documentType));
     setNumericDrafts({});
     setErrors({});
@@ -663,6 +707,7 @@ export function ChangeOrderGenerator({
 
   function clearToBlank(eventName: "example_cleared" | "form_cleared", message: string) {
     clearSavedDraft();
+    editRevisionRef.current += 1;
     setInput(createBlankInput(businessProfile ?? undefined, input.documentType));
     setNumericDrafts({});
     setErrors({});
@@ -726,6 +771,9 @@ export function ChangeOrderGenerator({
           exampleInput={exampleInput}
           total={generated.breakdown.total}
           deposit={generated.breakdown.depositAmount}
+          depositRequired={
+            input.paymentTiming === "deposit-before" && generated.breakdown.depositAmount > 0
+          }
           currency={input.currency}
           approvalDeadline={input.approvalDeadline}
           approvalUrgency={approvalUrgency}
@@ -904,6 +952,7 @@ export function ChangeOrderGenerator({
               numberFieldValue={numberFieldValue}
               setNumberField={setNumberField}
               normalizeNumberField={normalizeNumberField}
+              registerFirstError={registerFirstError}
             />
           </fieldset>
 
@@ -929,6 +978,7 @@ export function ChangeOrderGenerator({
               numberFieldValue={numberFieldValue}
               setNumberField={setNumberField}
               normalizeNumberField={normalizeNumberField}
+              registerFirstError={registerFirstError}
             />
           </fieldset>
 

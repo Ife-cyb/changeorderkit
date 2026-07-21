@@ -113,12 +113,7 @@ export function PrintableDocument({
       {!preview ? (
         <section>
           <h3>{isChangeOrder ? "Schedule impact" : "Schedule"}</h3>
-          <p>
-            {input.scheduleImpact ||
-              (input.startDate || input.endDate
-                ? `${input.startDate || "Start TBD"} to ${input.endDate || "completion TBD"}`
-                : "Schedule will be confirmed after approval.")}
-          </p>
+          <p>{generated.scheduleText}</p>
         </section>
       ) : null}
 
@@ -169,11 +164,11 @@ export function PrintableDocument({
         <>
           <section>
             <h3>Changes to scope</h3>
-            <p>{input.changePolicy || "Changes must be approved in writing before scheduling."}</p>
+            <p>{generated.changePolicyText}</p>
           </section>
           <section>
             <h3>Cancellation</h3>
-            <p>{input.cancellationTerms || "Cancellation terms should be reviewed before use."}</p>
+            <p>{generated.cancellationTermsText}</p>
           </section>
         </>
       ) : null}
@@ -188,13 +183,15 @@ export function PrintableDocument({
           <section>
             <h3>Scope boundary</h3>
             <p>{input.exclusions || "No additional exclusions listed."}</p>
-            <p>{generated.approvalText}</p>
+            <p>{generated.scopeBoundary}</p>
             {isServiceAgreement ? (
-              <p>
-                This service agreement starter is a business template, not legal advice. Have legal
-                terms reviewed for your location and trade.
-              </p>
+              <p>{generated.disclaimerText}</p>
             ) : null}
+          </section>
+
+          <section>
+            <h3>Client approval</h3>
+            <p>{generated.approvalText}</p>
           </section>
 
           <section className="signature-grid">
@@ -211,6 +208,23 @@ export function PrintableDocument({
               <i />
             </div>
           </section>
+
+          {isServiceAgreement ? (
+            <section className="signature-grid">
+              <div>
+                <span>Provider name</span>
+                <i />
+              </div>
+              <div>
+                <span>Provider signature</span>
+                <i />
+              </div>
+              <div>
+                <span>Date</span>
+                <i />
+              </div>
+            </section>
+          ) : null}
         </>
       ) : null}
     </div>

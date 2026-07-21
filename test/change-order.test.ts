@@ -7,7 +7,10 @@ import {
   deadlineUrgency,
   defaultInput,
   documentTypeLabel,
+  effectiveDepositPercent,
+  formatDate,
   formatMoney,
+  formatSchedule,
   generateChangeOrder,
   getPilotState,
   getTemplateKitState,
@@ -116,6 +119,66 @@ describe("change order math", () => {
       ]).toEqual(formatted);
     }
   });
+
+  it("only calculates a deposit when payment timing requires one", () => {
+    const depositBefore = generateChangeOrder({
+      ...defaultInput,
+      paymentTiming: "deposit-before",
+      depositPercent: 50
+    });
+
+    expect(effectiveDepositPercent({ paymentTiming: "deposit-before", depositPercent: 50 })).toBe(
+      50
+    );
+    expect(depositBefore.breakdown.depositAmount).toBe(456.25);
+    expect(depositBefore.breakdown.balanceAmount).toBe(456.25);
+
+    for (const paymentTiming of ["completion", "next-invoice"] as const) {
+      const generated = generateChangeOrder({
+        ...defaultInput,
+        paymentTiming,
+        depositPercent: 50
+      });
+
+      expect(effectiveDepositPercent({ paymentTiming, depositPercent: 50 })).toBe(0);
+      expect(generated.breakdown.depositAmount).toBe(0);
+      expect(generated.breakdown.balanceAmount).toBe(generated.breakdown.total);
+      expect(generated.summary).toContain("Deposit required: None for the selected payment timing.");
+    }
+  });
+
+  it("keeps non-deposit work-order follow-up and checklist copy coherent", () => {
+    const completion = generateChangeOrder({
+      ...createDefaultInput(undefined, "work-order"),
+      paymentTiming: "completion",
+      depositPercent: 50
+    });
+    const nextInvoice = generateChangeOrder({
+      ...createDefaultInput(undefined, "work-order"),
+      paymentTiming: "next-invoice",
+      depositPercent: 50
+    });
+
+    expect(completion.paymentTerms).toContain("due when the work is complete");
+    expect(completion.followUpTemplate).not.toContain("and deposit");
+    expect(completion.checklist).toContain("Confirm the full amount is due when the work is complete.");
+    expect(nextInvoice.paymentTerms).toContain("added to the next invoice");
+    expect(nextInvoice.followUpTemplate).not.toContain("and deposit");
+    expect(nextInvoice.checklist).toContain(
+      "Confirm the approved amount will be added to the next invoice."
+    );
+
+    const zeroDeposit = generateChangeOrder({
+      ...createDefaultInput(undefined, "work-order"),
+      paymentTiming: "deposit-before",
+      depositPercent: 0
+    });
+
+    expect(zeroDeposit.paymentTerms).toContain("No deposit is required");
+    expect(zeroDeposit.checklist).toContain(
+      "Confirm the full amount and invoice terms before scheduling."
+    );
+  });
 });
 
 describe("generated copy", () => {
@@ -164,6 +227,33 @@ describe("generated copy", () => {
     expect(isExampleInput({ ...createDefaultInput(), client: "A different client" })).toBe(false);
   });
 
+  it("recognizes profile-customized seeded examples without ignoring edited job content", () => {
+    const profiledExample = createDefaultInput(
+      {
+        businessName: "Northstar Repairs",
+        contactEmail: "jobs@northstar.example",
+        phone: "+234 800 000 0000",
+        defaultHourlyRate: 125,
+        defaultMarginPercent: 30,
+        defaultDepositPercent: 40,
+        defaultPaymentTiming: "completion",
+        defaultTone: "formal"
+      },
+      "work-order"
+    );
+
+    expect(
+      isExampleInput({
+        ...profiledExample,
+        approvalDeadline: "2040-01-01",
+        startDate: "2040-01-02",
+        endDate: "2040-01-03"
+      })
+    ).toBe(true);
+    expect(isExampleInput({ ...profiledExample, project: "A real customer job" })).toBe(false);
+    expect(isExampleInput({ ...profiledExample, newRequest: "A real customer scope" })).toBe(false);
+  });
+
   it("derives stable business initials for printable branding", () => {
     expect(businessInitials("Greenline Remodeling")).toBe("GR");
     expect(businessInitials("BuildCo")).toBe("B");
@@ -179,6 +269,40 @@ describe("generated copy", () => {
     expect(deadlineUrgency("2026-07-21", referenceDate)).toBe("soon");
     expect(deadlineUrgency("2026-07-22", referenceDate)).toBe("normal");
     expect(deadlineUrgency("not-a-date", referenceDate)).toBe("normal");
+  });
+
+  it("classifies deadlines from the local calendar day near midnight", () => {
+    const previousTimezone = process.env.TZ;
+
+    try {
+      process.env.TZ = "Africa/Lagos";
+      const localReferenceDate = new Date(2026, 6, 22, 0, 30);
+
+      expect(localReferenceDate.toISOString().slice(0, 10)).toBe("2026-07-21");
+      expect(deadlineUrgency("2026-07-21", localReferenceDate)).toBe("overdue");
+    } finally {
+      if (previousTimezone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = previousTimezone;
+      }
+    }
+  });
+
+  it("preserves both dated scheduling and schedule notes", () => {
+    const input = {
+      ...createDefaultInput(undefined, "work-order"),
+      startDate: "2026-08-01",
+      endDate: "2026-08-03",
+      scheduleImpact: "Client access is limited to 9am-2pm."
+    };
+    const schedule =
+      "August 1, 2026 to August 3, 2026. Client access is limited to 9am-2pm.";
+    const generated = generateChangeOrder(input);
+
+    expect(formatSchedule(input)).toBe(schedule);
+    expect(generated.scheduleText).toBe(schedule);
+    expect(generated.primaryDocument).toContain(`Schedule: ${schedule}`);
   });
 
   it("includes approval and scope protection language", () => {
@@ -217,6 +341,9 @@ describe("generated copy", () => {
     expect(generated.fullDocument).toContain("WORK ORDER DOCUMENT");
     expect(generated.primaryDocument).toContain("SCOPE OF WORK");
     expect(generated.primaryDocument).toContain("CLIENT RESPONSIBILITIES");
+    expect(generated.primaryDocument).toContain(
+      `Approval deadline: ${formatDate(input.approvalDeadline)}`
+    );
     expect(generated.clientEmail).toContain("work order");
     expect(generated.invoiceNote).toContain("Approved work order");
   });
@@ -231,6 +358,32 @@ describe("generated copy", () => {
     expect(generated.primaryDocument).toContain("not legal advice");
     expect(generated.primaryDocument).toContain("CHANGES TO SCOPE");
     expect(generated.primaryDocument).toContain("CANCELLATION");
+    expect(generated.primaryDocument).toContain(
+      `Approval deadline: ${formatDate(input.approvalDeadline)}`
+    );
+    expect(generated.primaryDocument).toContain(generated.changePolicyText);
+    expect(generated.primaryDocument).toContain(generated.cancellationTermsText);
+    expect(generated.primaryDocument).toContain(generated.disclaimerText);
+    expect(generated.scopeBoundary).toContain("visible finish work");
+  });
+
+  it("exposes normalized service-agreement clauses for printable output", () => {
+    const generated = generateChangeOrder({
+      ...createBlankInput(undefined, "service-agreement"),
+      documentTitle: "Service agreement for Oak Street",
+      provider: "Northstar Repairs",
+      client: "Jordan Lee",
+      project: "Oak Street",
+      newRequest: "Provide the listed repair services.",
+      changePolicy: "",
+      cancellationTerms: ""
+    });
+
+    expect(generated.changePolicyText).toContain("Requested changes, added work");
+    expect(generated.cancellationTermsText).toContain("Either party may request cancellation");
+    expect(generated.disclaimerText).toContain("not legal advice");
+    expect(generated.primaryDocument).toContain(generated.changePolicyText);
+    expect(generated.primaryDocument).toContain(generated.cancellationTermsText);
   });
 });
 
@@ -284,6 +437,32 @@ describe("validation", () => {
     expect(agreementErrors.newRequest).toBeTruthy();
   });
 
+  it("rejects a completion target before the start date", () => {
+    const errors = validateChangeOrder({
+      ...createDefaultInput(undefined, "work-order"),
+      startDate: "2026-08-03",
+      endDate: "2026-08-01"
+    });
+
+    expect(errors.endDate).toBe("Completion target cannot be before the start date.");
+  });
+
+  it("does not block non-deposit payment modes on an unused deposit percentage", () => {
+    const completionErrors = validateChangeOrder({
+      ...defaultInput,
+      paymentTiming: "completion",
+      depositPercent: 150
+    });
+    const depositErrors = validateChangeOrder({
+      ...defaultInput,
+      paymentTiming: "deposit-before",
+      depositPercent: 150
+    });
+
+    expect(completionErrors.depositPercent).toBeUndefined();
+    expect(depositErrors.depositPercent).toBeTruthy();
+  });
+
   it("sanitizes corrupted browser drafts before validation or formatting", () => {
     const sanitized = sanitizeChangeOrderInput({
       laborHours: "7.5",
@@ -311,6 +490,23 @@ describe("validation", () => {
     expect(sanitized.scheduleImpact).toHaveLength(1200);
     expect(sanitized.exclusions).toHaveLength(1800);
     expect(formatMoney(10, "not-a-currency")).toBe("$10.00");
+  });
+
+  it("rejects impossible calendar dates without rejecting valid leap dates", () => {
+    const impossible = sanitizeChangeOrderInput({
+      ...defaultInput,
+      approvalDeadline: "2026-02-31",
+      startDate: "2026-02-29"
+    });
+    const leapDate = sanitizeChangeOrderInput({
+      ...defaultInput,
+      approvalDeadline: "2028-02-29"
+    });
+
+    expect(impossible.approvalDeadline).not.toBe("2026-02-31");
+    expect(impossible.startDate).not.toBe("2026-02-29");
+    expect(formatDate("2026-02-31")).toBe("the agreed approval date");
+    expect(leapDate.approvalDeadline).toBe("2028-02-29");
   });
 });
 
