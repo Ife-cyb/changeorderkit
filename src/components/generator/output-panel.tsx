@@ -265,17 +265,21 @@ export function OutputPanel({
   return (
     <section
       ref={outputRef}
-      className="utility-panel print-area p-4 sm:p-5 xl:sticky xl:top-24 xl:self-start"
+      className="utility-panel output-workspace print-area p-4 sm:p-5 xl:sticky xl:top-24 xl:self-start"
     >
-      <div className="no-print mb-5">
+      <div className="no-print mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="panel-kicker">
             <FileText className="h-4 w-4" aria-hidden="true" />
-            Client-ready output
+            Live client view
           </p>
           <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--ink)]">
-            Review, save, or send.
+            This is what your client sees.
           </h2>
+        </div>
+        <div className="live-preview-status">
+          <span aria-hidden="true" />
+          Updates as you type
         </div>
       </div>
 

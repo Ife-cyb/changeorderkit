@@ -144,8 +144,8 @@ export const defaultInput: ProjectDocumentInput = {
   documentTitle: "Change order for kitchen backsplash refresh",
   provider: "Greenline Remodeling",
   businessEmail: "hello@greenlineremodeling.com",
-  businessPhone: "(555) 014-2338",
-  client: "Morgan Smith",
+  businessPhone: "+1 (312) 847-1928",
+  client: "Mira Okonkwo",
   project: "Kitchen backsplash refresh",
   jobLocation: "123 Maple Avenue",
   originalScope:
@@ -680,7 +680,11 @@ export function validateChangeOrder(input: ProjectDocumentInput): ValidationErro
   const errors: ValidationErrors = {};
   const label = documentTypeLabel(input.documentType).toLowerCase();
 
-  if (!input.documentTitle.trim()) {
+  if (!input.project.trim()) {
+    errors.project = "Add the project or job name.";
+  }
+
+  if (!input.documentTitle.trim() && input.project.trim()) {
     errors.documentTitle = "Add a document title.";
   }
 

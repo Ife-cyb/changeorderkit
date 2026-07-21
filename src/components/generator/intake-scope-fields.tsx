@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronDown } from "lucide-react";
 import { type ChangeOrderInput, type ValidationErrors } from "@/lib/change-order";
 
 type FieldNode = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
@@ -25,7 +25,6 @@ function InputError({ id, message }: { id: string; message?: string }) {
     </p>
   );
 }
-
 export function IntakeScopeFields({
   input,
   errors,
@@ -38,91 +37,114 @@ export function IntakeScopeFields({
   registerFirstError
 }: Props) {
   return (
-    <div className="mt-7 border-t border-[var(--border)] pt-7">
-      <p className="panel-kicker mb-4">{scopeKicker}</p>
-      <div className="grid gap-4">
-        {isChangeOrder ? (
-          <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-            Original agreed scope
-            <textarea
-              className="field-control"
-              value={input.originalScope}
-              aria-invalid={Boolean(errors.originalScope)}
-              aria-describedby="originalScope-help originalScope-error"
-              ref={(node) => registerFirstError("originalScope", node)}
-              onChange={(event) => setTextField("originalScope", event.target.value)}
-            />
-            <span id="originalScope-help" className="text-sm font-medium text-[var(--muted)]">
-              What was already included before the new request?
-            </span>
-            <InputError id="originalScope-error" message={errors.originalScope} />
-          </label>
-        ) : null}
-
-        <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-          {primaryScopeLabel}
+    <>
+      <div className="guided-fields grid gap-4">
+        <label className="field-label">
+          <span className="field-label-line">
+            {primaryScopeLabel} <small>{scopeKicker}</small>
+          </span>
           <textarea
-            className="field-control"
+            className="field-control field-control-emphasis"
             value={input.newRequest}
+            placeholder={
+              isChangeOrder
+                ? "Describe exactly what the client asked to add or change."
+                : "Describe the work, deliverables, and finished result."
+            }
             aria-invalid={Boolean(errors.newRequest)}
             aria-describedby="newRequest-help newRequest-error"
             ref={(node) => registerFirstError("newRequest", node)}
             onChange={(event) => setTextField("newRequest", event.target.value)}
           />
-          <span id="newRequest-help" className="text-sm font-medium text-[var(--muted)]">
+          <span id="newRequest-help" className="field-help">
             {primaryScopeHelp}
           </span>
           <InputError id="newRequest-error" message={errors.newRequest} />
         </label>
 
-        <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-          {isChangeOrder ? "Schedule impact" : "Schedule notes"}
-          <textarea
-            className="field-control"
-            value={input.scheduleImpact}
-            onChange={(event) => setTextField("scheduleImpact", event.target.value)}
-          />
-        </label>
-
-        <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-          Exclusions and scope boundary
-          <textarea
-            className="field-control"
-            value={input.exclusions}
-            onChange={(event) => setTextField("exclusions", event.target.value)}
-          />
-        </label>
-        {!isChangeOrder ? (
-          <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-            Client responsibilities
+        {isChangeOrder ? (
+          <label className="field-label">
+            Original agreed scope
             <textarea
               className="field-control"
-              value={input.clientResponsibilities}
-              onChange={(event) => setTextField("clientResponsibilities", event.target.value)}
+              value={input.originalScope}
+              placeholder="What was included before this request?"
+              aria-invalid={Boolean(errors.originalScope)}
+              aria-describedby="originalScope-help originalScope-error"
+              ref={(node) => registerFirstError("originalScope", node)}
+              onChange={(event) => setTextField("originalScope", event.target.value)}
             />
+            <span id="originalScope-help" className="field-help">
+              This makes the boundary between approved and added work easy to see.
+            </span>
+            <InputError id="originalScope-error" message={errors.originalScope} />
           </label>
         ) : null}
-        {isServiceAgreement ? (
-          <>
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Change policy
-              <textarea
-                className="field-control"
-                value={input.changePolicy}
-                onChange={(event) => setTextField("changePolicy", event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-              Cancellation language
-              <textarea
-                className="field-control"
-                value={input.cancellationTerms}
-                onChange={(event) => setTextField("cancellationTerms", event.target.value)}
-              />
-            </label>
-          </>
-        ) : null}
       </div>
-    </div>
+
+      <details className="optional-disclosure">
+        <summary>
+          <span>
+            Add schedule and safeguards
+            <small>Timing, exclusions, responsibilities, and policies</small>
+          </span>
+          <ChevronDown className="h-5 w-5" aria-hidden="true" />
+        </summary>
+        <div className="optional-disclosure-body grid gap-4">
+          <label className="field-label">
+            {isChangeOrder ? "Schedule impact" : "Schedule notes"} <small>Optional</small>
+            <textarea
+              className="field-control"
+              value={input.scheduleImpact}
+              placeholder="Adds one workday after materials arrive."
+              onChange={(event) => setTextField("scheduleImpact", event.target.value)}
+            />
+          </label>
+
+          <label className="field-label">
+            Exclusions and scope boundary <small>Optional</small>
+            <textarea
+              className="field-control"
+              value={input.exclusions}
+              placeholder="List work, materials, permits, or hidden conditions that are not included."
+              onChange={(event) => setTextField("exclusions", event.target.value)}
+            />
+          </label>
+
+          {!isChangeOrder ? (
+            <label className="field-label">
+              Client responsibilities <small>Optional</small>
+              <textarea
+                className="field-control"
+                value={input.clientResponsibilities}
+                placeholder="Site access, final selections, approvals, or owner-supplied materials."
+                onChange={(event) => setTextField("clientResponsibilities", event.target.value)}
+              />
+            </label>
+          ) : null}
+
+          {isServiceAgreement ? (
+            <>
+              <label className="field-label">
+                Change policy
+                <textarea
+                  className="field-control"
+                  value={input.changePolicy}
+                  onChange={(event) => setTextField("changePolicy", event.target.value)}
+                />
+              </label>
+              <label className="field-label">
+                Cancellation language
+                <textarea
+                  className="field-control"
+                  value={input.cancellationTerms}
+                  onChange={(event) => setTextField("cancellationTerms", event.target.value)}
+                />
+              </label>
+            </>
+          ) : null}
+        </div>
+      </details>
+    </>
   );
 }

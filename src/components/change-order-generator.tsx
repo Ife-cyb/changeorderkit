@@ -1,7 +1,10 @@
 "use client";
 
 import {
-  Calculator,
+  ArrowRight,
+  BriefcaseBusiness,
+  CalendarClock,
+  CircleDollarSign,
   RotateCcw,
   Save,
   ShieldCheck,
@@ -11,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveChangeOrderAction } from "@/app/actions/change-orders";
 import { DraftSummaryCard } from "@/components/generator/draft-summary-card";
+import { GuidedSectionHeader } from "@/components/generator/guided-section-header";
 import { IntakeContactFields } from "@/components/generator/intake-contact-fields";
 import {
   IntakePricingFields,
@@ -44,6 +48,8 @@ import {
 import { funnelEvents, totalBucket } from "@/lib/funnel";
 import { trackEvent } from "@/lib/tracking";
 
+type GuidedSectionId = "job" | "scope" | "price" | "approval";
+
 type Props = {
   pilotLink?: string;
   templateKitLink?: string;
@@ -63,6 +69,17 @@ type LocalDraftRecord = {
   input: ChangeOrderInput;
   savedAt: string | null;
 };
+
+const guidedSections: Array<{
+  id: GuidedSectionId;
+  label: string;
+  description: string;
+}> = [
+  { id: "job", label: "Job", description: "Who and where" },
+  { id: "scope", label: "Scope", description: "What changes" },
+  { id: "price", label: "Price", description: "What it costs" },
+  { id: "approval", label: "Approval", description: "What happens next" }
+];
 
 const documentCopy: Record<
   DocumentType,
@@ -103,6 +120,11 @@ const documentCopy: Record<
     generatedToast: "Service agreement generated."
   }
 };
+
+function titleForProject(documentType: DocumentType, project: string) {
+  const trimmedProject = project.trim();
+  return trimmedProject ? `${documentTypeLabel(documentType)} for ${trimmedProject}` : "";
+}
 
 function parseSavedDraft(value: string | null): LocalDraftRecord | null {
   if (!value) {
@@ -235,6 +257,7 @@ export function ChangeOrderGenerator({
   const [toast, setToast] = useState("");
   const [numericDrafts, setNumericDrafts] = useState<Partial<Record<NumericField, string>>>({});
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [activeSection, setActiveSection] = useState<GuidedSectionId>("job");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [autosaveAvailable, setAutosaveAvailable] = useState(true);
   const [autosaveClock, setAutosaveClock] = useState(() => Date.now());
@@ -269,6 +292,38 @@ export function ChangeOrderGenerator({
   const documentLabelLower = documentLabel.toLowerCase();
   const isChangeOrder = input.documentType === "change-order";
   const isServiceAgreement = input.documentType === "service-agreement";
+  const sectionReadiness = useMemo<Record<GuidedSectionId, boolean>>(
+    () => ({
+      job: Boolean(input.provider.trim() && input.client.trim() && input.project.trim()),
+      scope: Boolean(input.newRequest.trim() && (!isChangeOrder || input.originalScope.trim())),
+      price: generated.breakdown.total > 0,
+      approval: Boolean(input.approvalDeadline && input.paymentTiming)
+    }),
+    [generated.breakdown.total, input, isChangeOrder]
+  );
+  const completedSections = Object.values(sectionReadiness).filter(Boolean).length;
+  const completionPercent = completedSections * 25;
+  const sectionErrors = useMemo<Record<GuidedSectionId, boolean>>(
+    () => ({
+      job: Boolean(
+        errors.documentTitle ||
+          errors.provider ||
+          errors.businessEmail ||
+          errors.client ||
+          errors.project
+      ),
+      scope: Boolean(errors.originalScope || errors.newRequest),
+      price: Boolean(
+        errors.laborHours ||
+          errors.hourlyRate ||
+          errors.materialsCost ||
+          errors.marginPercent ||
+          errors.rushPercent
+      ),
+      approval: Boolean(errors.depositPercent)
+    }),
+    [errors]
+  );
   const hasBlankOutput = !input.provider.trim() && !input.client.trim() && !input.newRequest.trim();
   const approvalUrgency = deadlineUrgency(input.approvalDeadline);
   const exampleInput = isExampleInput(input);
@@ -356,9 +411,54 @@ export function ChangeOrderGenerator({
     window.setTimeout(() => firstFieldRef.current?.focus({ preventScroll: true }), 300);
   }
 
+  function clearFieldError(field: keyof ChangeOrderInput) {
+    setErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
   function setTextField(field: keyof ChangeOrderInput, value: string) {
     trackFormStarted();
     setInput((current) => ({ ...current, [field]: value }));
+    clearFieldError(field);
+  }
+
+  function setProjectName(value: string) {
+    trackFormStarted();
+    setInput((current) => {
+      const currentAutoTitle = titleForProject(current.documentType, current.project);
+      const knownDefaultTitles = documentTypeOptions.map(
+        (option) => createDefaultInput(undefined, option.value).documentTitle
+      );
+      const shouldUpdateTitle =
+        !current.documentTitle.trim() ||
+        current.documentTitle === currentAutoTitle ||
+        knownDefaultTitles.includes(current.documentTitle);
+
+      return {
+        ...current,
+        project: value,
+        documentTitle: shouldUpdateTitle
+          ? titleForProject(current.documentType, value)
+          : current.documentTitle
+      };
+    });
+    clearFieldError("project");
+    clearFieldError("documentTitle");
+  }
+
+  function jumpToSection(sectionId: GuidedSectionId) {
+    setActiveSection(sectionId);
+    document.getElementById(`form-section-${sectionId}`)?.scrollIntoView({
+      behavior: preferredScrollBehavior(),
+      block: "start"
+    });
   }
 
   function setDocumentType(value: DocumentType) {
@@ -400,6 +500,7 @@ export function ChangeOrderGenerator({
     setNumericDrafts((current) => ({ ...current, [field]: value }));
     const parsed = Number.parseFloat(value);
     setInput((current) => ({ ...current, [field]: Number.isFinite(parsed) ? parsed : 0 }));
+    clearFieldError(field);
   }
 
   function numberFieldValue(field: NumericField) {
@@ -555,6 +656,7 @@ export function ChangeOrderGenerator({
     setInput(createDefaultInput(businessProfile ?? undefined, input.documentType));
     setNumericDrafts({});
     setErrors({});
+    setActiveSection("job");
     showToast("Example draft restored.");
     trackEvent(funnelEvents.draftReset);
   }
@@ -564,6 +666,7 @@ export function ChangeOrderGenerator({
     setInput(createBlankInput(businessProfile ?? undefined, input.documentType));
     setNumericDrafts({});
     setErrors({});
+    setActiveSection("job");
     setLastSavedAt(null);
     showToast(message);
     trackEvent(eventName, { document_type: input.documentType });
@@ -633,75 +736,208 @@ export function ChangeOrderGenerator({
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(430px,1.08fr)] xl:items-start">
         <form
           ref={intakeRef}
-          className="utility-panel no-print scroll-mt-6 p-4 sm:p-5"
+          className="utility-panel guided-form-shell no-print scroll-mt-6 overflow-hidden"
           onSubmit={onGenerate}
           noValidate
         >
-          <div className="form-section-title mb-5">
+          <div className="guided-form-topbar">
             <div>
-              <p className="panel-kicker">Scope intake</p>
+              <p className="panel-kicker">Guided job intake</p>
               <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--ink)]">
                 Build the {documentLabelLower}
               </h2>
+              <p className="guided-form-dek mt-2 max-w-[52ch] text-sm leading-6 text-[var(--muted)]">
+                Work through the job in the same order you would explain it to your client.
+              </p>
             </div>
-            <span className="hidden rounded-md border border-[var(--border)] bg-[var(--paper-soft)] px-3 py-2 font-mono text-sm font-bold text-[var(--ink-soft)] sm:inline-flex">
-              {autosaveLabel(lastSavedAt, autosaveClock, useLocalDraft, autosaveAvailable)}
-            </span>
+            <div className="guided-form-utilities">
+              <span className="autosave-note">
+                <span aria-hidden="true" />
+                {autosaveLabel(lastSavedAt, autosaveClock, useLocalDraft, autosaveAvailable)}
+              </span>
+              <button type="button" className="form-text-action" onClick={resetDraft}>
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                Example
+              </button>
+              <button
+                type="button"
+                className="form-text-action"
+                onClick={() => clearToBlank(funnelEvents.formCleared, "Form cleared.")}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Clear
+              </button>
+            </div>
           </div>
           {exampleInput ? (
-            <div className="mb-5 flex flex-col gap-3 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] p-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-bold text-[var(--accent-strong)]">
-                You&apos;re viewing an example job.
+            <div className="example-handoff">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              <p>
+                <strong>Example job loaded.</strong>{" "}
+                <span>See the finished result, then replace it with your own details.</span>
               </p>
               <button
                 type="button"
-                className="btn btn-primary shrink-0"
                 onClick={() => clearToBlank(funnelEvents.exampleCleared, "Ready for your job details.")}
               >
                 Use my own job
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           ) : null}
           {hasErrors ? (
-            <div className="mb-5 rounded-lg border border-[color:oklch(0.72_0.08_25)] bg-[var(--danger-soft)] p-3 text-sm font-semibold text-[var(--danger)]">
-              Review the highlighted fields. The document is easier to defend when the scope
-              details are complete.
+            <div className="form-error-summary" role="alert">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              <p>
+                <strong>A few details need attention.</strong>{" "}
+                <span>The first highlighted field is ready for you.</span>
+              </p>
             </div>
           ) : null}
 
-          <IntakeContactFields
-            input={input}
-            errors={errors}
-            isChangeOrder={isChangeOrder}
-            setTextField={setTextField}
-            registerFirstError={registerFirstError}
-            setFirstField={(node) => {
-              firstFieldRef.current = node;
-            }}
-          />
-          <IntakeScopeFields
-            input={input}
-            errors={errors}
-            isChangeOrder={isChangeOrder}
-            isServiceAgreement={isServiceAgreement}
-            scopeKicker={activeCopy.scopeKicker}
-            primaryScopeLabel={activeCopy.primaryScopeLabel}
-            primaryScopeHelp={activeCopy.primaryScopeHelp}
-            setTextField={setTextField}
-            registerFirstError={registerFirstError}
-          />
-          <IntakePricingFields
-            errors={errors}
-            numberFieldValue={numberFieldValue}
-            setNumberField={setNumberField}
-            normalizeNumberField={normalizeNumberField}
-          />
-          <IntakeTermsFields input={input} setTextField={setTextField} />
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <button type="submit" className="btn btn-primary">
-              <Calculator className="h-5 w-5" aria-hidden="true" />
-              Check &amp; review
-            </button>
+          <nav className="form-progress" aria-label="Form sections">
+            <div className="form-progress-summary">
+              <span>{completedSections} of 4 sections ready</span>
+              <span>{completionPercent}%</span>
+            </div>
+            <div className="form-progress-track" aria-hidden="true">
+              <span style={{ transform: `scaleX(${completionPercent / 100})` }} />
+            </div>
+            <ol>
+              {guidedSections.map((section, index) => (
+                <li key={section.id}>
+                  <button
+                    type="button"
+                    className={
+                      activeSection === section.id
+                        ? "form-progress-step form-progress-step-active"
+                        : "form-progress-step"
+                    }
+                    onClick={() => jumpToSection(section.id)}
+                    aria-current={activeSection === section.id ? "step" : undefined}
+                  >
+                    <span className="form-progress-index">{String(index + 1).padStart(2, "0")}</span>
+                    <span>
+                      <strong>{section.label}</strong>
+                      <small>{section.description}</small>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </nav>
+
+          <fieldset
+            id="form-section-job"
+            className="guided-form-section"
+            onFocusCapture={() => setActiveSection("job")}
+          >
+            <legend className="sr-only">Job and contact details</legend>
+            <GuidedSectionHeader
+              number="01"
+              title="Name the job"
+              description="Start with the people and project so the document feels real immediately."
+              ready={sectionReadiness.job}
+              hasError={sectionErrors.job}
+              icon={BriefcaseBusiness}
+            />
+            <IntakeContactFields
+              input={input}
+              errors={errors}
+              isChangeOrder={isChangeOrder}
+              setTextField={setTextField}
+              setProjectName={setProjectName}
+              registerFirstError={registerFirstError}
+              setFirstField={(node) => {
+                firstFieldRef.current = node;
+              }}
+            />
+          </fieldset>
+
+          <fieldset
+            id="form-section-scope"
+            className="guided-form-section"
+            onFocusCapture={() => setActiveSection("scope")}
+          >
+            <legend className="sr-only">Scope details</legend>
+            <GuidedSectionHeader
+              number="02"
+              title="Describe the work"
+              description="Capture the client request in plain language, then add safeguards only when needed."
+              ready={sectionReadiness.scope}
+              hasError={sectionErrors.scope}
+              icon={ShieldCheck}
+            />
+            <IntakeScopeFields
+              input={input}
+              errors={errors}
+              isChangeOrder={isChangeOrder}
+              isServiceAgreement={isServiceAgreement}
+              scopeKicker={activeCopy.scopeKicker}
+              primaryScopeLabel={activeCopy.primaryScopeLabel}
+              primaryScopeHelp={activeCopy.primaryScopeHelp}
+              setTextField={setTextField}
+              registerFirstError={registerFirstError}
+            />
+          </fieldset>
+
+          <fieldset
+            id="form-section-price"
+            className="guided-form-section"
+            onFocusCapture={() => setActiveSection("price")}
+          >
+            <legend className="sr-only">Pricing details</legend>
+            <GuidedSectionHeader
+              number="03"
+              title="Price it once"
+              description="Enter the numbers you already know. The client total updates as you type."
+              ready={sectionReadiness.price}
+              hasError={sectionErrors.price}
+              icon={CircleDollarSign}
+            />
+            <IntakePricingFields
+              input={input}
+              total={generated.breakdown.total}
+              isChangeOrder={isChangeOrder}
+              errors={errors}
+              setTextField={setTextField}
+              numberFieldValue={numberFieldValue}
+              setNumberField={setNumberField}
+              normalizeNumberField={normalizeNumberField}
+            />
+          </fieldset>
+
+          <fieldset
+            id="form-section-approval"
+            className="guided-form-section"
+            onFocusCapture={() => setActiveSection("approval")}
+          >
+            <legend className="sr-only">Approval details</legend>
+            <GuidedSectionHeader
+              number="04"
+              title="Set the handoff"
+              description="Tell the client what is due and when you need an answer."
+              ready={sectionReadiness.approval}
+              hasError={sectionErrors.approval}
+              icon={CalendarClock}
+            />
+            <IntakeTermsFields
+              input={input}
+              depositAmount={generated.breakdown.depositAmount}
+              errors={errors}
+              setTextField={setTextField}
+              numberFieldValue={numberFieldValue}
+              setNumberField={setNumberField}
+              normalizeNumberField={normalizeNumberField}
+            />
+          </fieldset>
+
+          <div className="guided-form-actions">
+            <div>
+              <strong>Your client document is already taking shape.</strong>
+              <span>Review it, then come back to change any detail.</span>
+            </div>
+            <div className="guided-form-action-buttons">
             <button
               type="button"
               className="btn btn-secondary"
@@ -709,20 +945,13 @@ export function ChangeOrderGenerator({
               disabled={isSaving}
             >
               <Save className="h-5 w-5" aria-hidden="true" />
-              {isSaving ? "Saving" : currentOrderId ? "Save changes" : "Save"}
+              {isSaving ? "Saving draft" : currentOrderId ? "Save changes" : "Save draft"}
             </button>
-            <button type="button" className="btn btn-secondary" onClick={resetDraft}>
-              <RotateCcw className="h-5 w-5" aria-hidden="true" />
-              Load example
+            <button type="submit" className="btn btn-primary">
+              Review {documentLabelLower}
+              <ArrowRight className="h-5 w-5" aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => clearToBlank(funnelEvents.formCleared, "Form cleared.")}
-            >
-              <Trash2 className="h-5 w-5" aria-hidden="true" />
-              Clear form
-            </button>
+            </div>
           </div>
         </form>
 

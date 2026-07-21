@@ -21,6 +21,7 @@ type Props = {
   errors: ValidationErrors;
   isChangeOrder: boolean;
   setTextField: (field: keyof ChangeOrderInput, value: string) => void;
+  setProjectName: (value: string) => void;
   registerFirstError: (field: keyof ChangeOrderInput, node: FieldNode) => void;
   setFirstField: (node: HTMLInputElement | null) => void;
 };
@@ -41,16 +42,20 @@ export function IntakeContactFields({
   errors,
   isChangeOrder,
   setTextField,
+  setProjectName,
   registerFirstError,
   setFirstField
 }: Props) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)] md:col-span-2">
-        Document title
+    <div className="guided-fields grid gap-4 md:grid-cols-2">
+      <label className="field-label md:col-span-2">
+        <span className="field-label-line">
+          Document title <small>Builds itself from the project name</small>
+        </span>
         <input
-          className="field-control"
+          className="field-control field-control-emphasis"
           value={input.documentTitle}
+          placeholder="Work order for Oak Street kitchen"
           aria-invalid={Boolean(errors.documentTitle)}
           aria-describedby={errors.documentTitle ? "documentTitle-error" : undefined}
           ref={(node) => {
@@ -62,11 +67,12 @@ export function IntakeContactFields({
         <InputError id="documentTitle-error" message={errors.documentTitle} />
       </label>
 
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+      <label className="field-label">
         Your business
         <input
           className="field-control"
           value={input.provider}
+          placeholder="Northline Renovations"
           autoComplete="organization"
           aria-invalid={Boolean(errors.provider)}
           aria-describedby={errors.provider ? "provider-error" : undefined}
@@ -76,11 +82,12 @@ export function IntakeContactFields({
         <InputError id="provider-error" message={errors.provider} />
       </label>
 
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+      <label className="field-label">
         Client
         <input
           className="field-control"
           value={input.client}
+          placeholder="Jordan Lee"
           autoComplete="name"
           aria-invalid={Boolean(errors.client)}
           aria-describedby={errors.client ? "client-error" : undefined}
@@ -90,13 +97,14 @@ export function IntakeContactFields({
         <InputError id="client-error" message={errors.client} />
       </label>
 
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+      <label className="field-label">
         Business email
         <input
           className="field-control"
           value={input.businessEmail}
           type="email"
           autoComplete="email"
+          placeholder="hello@yourbusiness.com"
           aria-invalid={Boolean(errors.businessEmail)}
           aria-describedby={errors.businessEmail ? "businessEmail-error" : undefined}
           ref={(node) => registerFirstError("businessEmail", node)}
@@ -105,38 +113,41 @@ export function IntakeContactFields({
         <InputError id="businessEmail-error" message={errors.businessEmail} />
       </label>
 
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+      <label className="field-label">
         Business phone
         <input
           className="field-control"
           value={input.businessPhone}
           autoComplete="tel"
+          placeholder="(555) 014-2204"
           onChange={(event) => setTextField("businessPhone", event.target.value)}
         />
       </label>
 
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+      <label className="field-label">
         Project
         <input
-          className="field-control"
+          className="field-control field-control-emphasis"
           value={input.project}
-          onChange={(event) => setTextField("project", event.target.value)}
+          placeholder="Oak Street kitchen"
+          onChange={(event) => setProjectName(event.target.value)}
         />
       </label>
 
       {!isChangeOrder ? (
         <>
-          <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+          <label className="field-label">
             Job location
             <input
               className="field-control"
               value={input.jobLocation}
               autoComplete="street-address"
+              placeholder="42 Oak Street"
               onChange={(event) => setTextField("jobLocation", event.target.value)}
             />
           </label>
 
-          <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+          <label className="field-label">
             Start date
             <input
               className="field-control"
@@ -146,7 +157,7 @@ export function IntakeContactFields({
             />
           </label>
 
-          <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+          <label className="field-label">
             Completion target
             <input
               className="field-control"
@@ -158,7 +169,7 @@ export function IntakeContactFields({
         </>
       ) : null}
 
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+      <label className="field-label">
         Industry
         <select
           className="field-control"

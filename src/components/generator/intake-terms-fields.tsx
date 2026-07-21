@@ -1,7 +1,11 @@
+import { AlertTriangle } from "lucide-react";
+import type { NumericField } from "@/components/generator/intake-pricing-fields";
 import {
   type ChangeOrderInput,
+  formatMoney,
   type PaymentTiming,
-  type Tone
+  type Tone,
+  type ValidationErrors
 } from "@/lib/change-order";
 
 const tones: Array<{ value: Tone; label: string }> = [
@@ -11,28 +15,43 @@ const tones: Array<{ value: Tone; label: string }> = [
 ];
 
 const paymentTimings: Array<{ value: PaymentTiming; label: string }> = [
-  { value: "deposit-before", label: "Deposit before added work begins" },
-  { value: "completion", label: "Due when added work is complete" },
+  { value: "deposit-before", label: "Deposit before work begins" },
+  { value: "completion", label: "Due when work is complete" },
   { value: "next-invoice", label: "Add to next invoice" }
 ];
 
-const currencies = [
-  { value: "USD", label: "USD — US dollar" },
-  { value: "CAD", label: "CAD — Canadian dollar" },
-  { value: "GBP", label: "GBP — British pound" },
-  { value: "AUD", label: "AUD — Australian dollar" },
-  { value: "NGN", label: "NGN — Nigerian naira" }
-] as const;
-
 type Props = {
   input: ChangeOrderInput;
+  depositAmount: number;
+  errors: ValidationErrors;
   setTextField: (field: keyof ChangeOrderInput, value: string) => void;
+  numberFieldValue: (field: NumericField) => string;
+  setNumberField: (field: NumericField, value: string) => void;
+  normalizeNumberField: (field: NumericField) => void;
 };
 
-export function IntakeTermsFields({ input, setTextField }: Props) {
+function InputError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+
   return (
-    <div className="mt-5 grid gap-4 border-t border-[var(--border)] pt-5 md:grid-cols-4">
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+    <p id={id} className="flex items-start gap-1.5 text-sm font-semibold text-[var(--danger)]" role="alert">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      {message}
+    </p>
+  );
+}
+export function IntakeTermsFields({
+  input,
+  depositAmount,
+  errors,
+  setTextField,
+  numberFieldValue,
+  setNumberField,
+  normalizeNumberField
+}: Props) {
+  return (
+    <div className="guided-fields grid gap-4 md:grid-cols-2">
+      <label className="field-label md:col-span-2">
         Payment timing
         <select
           className="field-control"
@@ -47,7 +66,28 @@ export function IntakeTermsFields({ input, setTextField }: Props) {
         </select>
       </label>
 
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
+      <label className="field-label">
+        Deposit %
+        <input
+          className="field-control"
+          type="number"
+          min="0"
+          max="100"
+          step="1"
+          inputMode="decimal"
+          value={numberFieldValue("depositPercent")}
+          aria-invalid={Boolean(errors.depositPercent)}
+          aria-describedby="deposit-help depositPercent-error"
+          onChange={(event) => setNumberField("depositPercent", event.target.value)}
+          onBlur={() => normalizeNumberField("depositPercent")}
+        />
+        <span id="deposit-help" className="field-help">
+          {formatMoney(depositAmount, input.currency)} due before work
+        </span>
+        <InputError id="depositPercent-error" message={errors.depositPercent} />
+      </label>
+
+      <label className="field-label">
         Approval deadline
         <input
           className="field-control"
@@ -57,8 +97,8 @@ export function IntakeTermsFields({ input, setTextField }: Props) {
         />
       </label>
 
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-        Email tone
+      <label className="field-label md:col-span-2">
+        Client email tone
         <select
           className="field-control"
           value={input.tone}
@@ -67,21 +107,6 @@ export function IntakeTermsFields({ input, setTextField }: Props) {
           {tones.map((tone) => (
             <option key={tone.value} value={tone.value}>
               {tone.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="grid gap-2 text-sm font-bold text-[var(--ink)]">
-        Currency
-        <select
-          className="field-control"
-          value={input.currency}
-          onChange={(event) => setTextField("currency", event.target.value)}
-        >
-          {currencies.map((currency) => (
-            <option key={currency.value} value={currency.value}>
-              {currency.label}
             </option>
           ))}
         </select>
