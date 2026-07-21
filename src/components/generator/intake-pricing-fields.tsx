@@ -30,6 +30,7 @@ type Props = {
   numberFieldValue: (field: NumericField) => string;
   setNumberField: (field: NumericField, value: string) => void;
   normalizeNumberField: (field: NumericField) => void;
+  registerFirstError: (field: keyof ChangeOrderInput, node: HTMLInputElement | null) => void;
 };
 
 function InputError({ id, message }: { id: string; message?: string }) {
@@ -50,8 +51,11 @@ export function IntakePricingFields({
   setTextField,
   numberFieldValue,
   setNumberField,
-  normalizeNumberField
+  normalizeNumberField,
+  registerFirstError
 }: Props) {
+  const hasAdjustmentErrors = Boolean(errors.marginPercent || errors.rushPercent);
+
   return (
     <>
       <div className="guided-fields pricing-fields grid gap-4 md:grid-cols-2">
@@ -81,6 +85,7 @@ export function IntakePricingFields({
             value={numberFieldValue("laborHours")}
             aria-invalid={Boolean(errors.laborHours)}
             aria-describedby={errors.laborHours ? "laborHours-error" : undefined}
+            ref={(node) => registerFirstError("laborHours", node)}
             onChange={(event) => setNumberField("laborHours", event.target.value)}
             onBlur={() => normalizeNumberField("laborHours")}
           />
@@ -98,6 +103,7 @@ export function IntakePricingFields({
             value={numberFieldValue("hourlyRate")}
             aria-invalid={Boolean(errors.hourlyRate)}
             aria-describedby={errors.hourlyRate ? "hourlyRate-error" : undefined}
+            ref={(node) => registerFirstError("hourlyRate", node)}
             onChange={(event) => setNumberField("hourlyRate", event.target.value)}
             onBlur={() => normalizeNumberField("hourlyRate")}
           />
@@ -115,6 +121,7 @@ export function IntakePricingFields({
             value={numberFieldValue("materialsCost")}
             aria-invalid={Boolean(errors.materialsCost)}
             aria-describedby={errors.materialsCost ? "materialsCost-error" : undefined}
+            ref={(node) => registerFirstError("materialsCost", node)}
             onChange={(event) => setNumberField("materialsCost", event.target.value)}
             onBlur={() => normalizeNumberField("materialsCost")}
           />
@@ -133,7 +140,19 @@ export function IntakePricingFields({
         <strong>{formatMoney(total, input.currency)}</strong>
       </div>
 
-      <details className="optional-disclosure">
+      <details
+        className="optional-disclosure"
+        ref={(node) => {
+          if (node && hasAdjustmentErrors) {
+            node.open = true;
+          }
+        }}
+        onToggle={(event) => {
+          if (hasAdjustmentErrors && !event.currentTarget.open) {
+            event.currentTarget.open = true;
+          }
+        }}
+      >
         <summary>
           <span>
             Adjust margin or rush pricing
@@ -154,6 +173,7 @@ export function IntakePricingFields({
               value={numberFieldValue("marginPercent")}
               aria-invalid={Boolean(errors.marginPercent)}
               aria-describedby="marginPercent-help marginPercent-error"
+              ref={(node) => registerFirstError("marginPercent", node)}
               onChange={(event) => setNumberField("marginPercent", event.target.value)}
               onBlur={() => normalizeNumberField("marginPercent")}
             />
@@ -175,6 +195,7 @@ export function IntakePricingFields({
               value={numberFieldValue("rushPercent")}
               aria-invalid={Boolean(errors.rushPercent)}
               aria-describedby="rushPercent-help rushPercent-error"
+              ref={(node) => registerFirstError("rushPercent", node)}
               onChange={(event) => setNumberField("rushPercent", event.target.value)}
               onBlur={() => normalizeNumberField("rushPercent")}
             />

@@ -18,13 +18,12 @@ import {
   duplicateChangeOrderFormAction,
   reopenChangeOrderFormAction
 } from "@/app/actions/change-orders";
+import { ApprovalDeadlineIndicator } from "@/components/deadline-urgency";
 import { SetupNotice } from "@/components/setup-notice";
 import { changeOrderFromRow, profileFromRow } from "@/lib/change-order-records";
 import {
-  deadlineUrgency,
   documentTypeLabel,
   documentTypeOptions,
-  formatDate,
   formatMoney,
   sanitizeDocumentType,
   type DocumentType,
@@ -47,8 +46,14 @@ function formatUpdatedAt(value: string) {
 }
 
 type SearchParams = Promise<{
-  type?: string;
+  type?: string | string[];
+  message?: string | string[];
+  error?: string | string[];
 }>;
+
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 function StatusPill({ status }: { status: SavedProjectDocument["status"] }) {
   const label = status === "archived" ? "Archived" : status === "ready" ? "Ready" : "Draft";
@@ -64,23 +69,6 @@ function TypePill({ documentType }: { documentType: DocumentType }) {
   return (
     <span className="inline-flex min-h-7 items-center rounded-full border border-[var(--border)] bg-[var(--paper-soft)] px-2.5 text-xs font-black uppercase tracking-[0.1em] text-[var(--ink-soft)]">
       {documentTypeLabel(documentType)}
-    </span>
-  );
-}
-
-function ApprovalDeadline({ value }: { value: string }) {
-  const urgency = deadlineUrgency(value);
-  const urgencyClass =
-    urgency === "overdue"
-      ? "text-[var(--danger)]"
-      : urgency === "soon"
-        ? "text-[var(--warning)]"
-        : "text-[var(--muted)]";
-
-  return (
-    <span className={`text-sm font-semibold ${urgencyClass}`}>
-      Approval {formatDate(value)}
-      {urgency === "overdue" ? " · Overdue" : urgency === "soon" ? " · Due soon" : ""}
     </span>
   );
 }
@@ -125,7 +113,7 @@ function DocumentList({ orders }: { orders: SavedProjectDocument[] }) {
                   Updated {formatUpdatedAt(order.updatedAt)}
                 </span>
                 {order.input.approvalDeadline ? (
-                  <ApprovalDeadline value={order.input.approvalDeadline} />
+                  <ApprovalDeadlineIndicator value={order.input.approvalDeadline} />
                 ) : null}
               </div>
               <h2 className="mt-3 text-xl font-black tracking-tight text-[var(--ink)]">
@@ -187,7 +175,10 @@ function typeFilterHref(type?: DocumentType) {
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
-  const { type } = await searchParams;
+  const params = await searchParams;
+  const type = first(params.type);
+  const message = first(params.message);
+  const mutationError = first(params.error);
   const activeType = type ? sanitizeDocumentType(type) : null;
   const supabase = await createSupabaseServerClient();
 
@@ -202,14 +193,32 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     redirect("/sign-in?next=/dashboard");
   }
 
-  const [{ data: profileRow }, { data: orderRows, error: orderError }] = await Promise.all([
+  const [
+    { data: profileRow, error: profileError },
+    { data: orderRows, error: orderError }
+  ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
     supabase.from("change_orders").select("*").eq("user_id", userId).order("updated_at", {
       ascending: false
     })
   ]);
 
-  const profile = profileFromRow(profileRow);
+  const profile = profileError ? null : profileFromRow(profileRow);
+
+  if (profileError) {
+    console.error("Dashboard profile query failed.", {
+      code: profileError.code,
+      message: profileError.message
+    });
+  }
+
+  if (orderError) {
+    console.error("Dashboard document query failed.", {
+      code: orderError.code,
+      message: orderError.message
+    });
+  }
+
   const orders = (orderRows ?? []).map(changeOrderFromRow);
   const filteredOrders = activeType
     ? orders.filter((order) => order.documentType === activeType)
@@ -246,6 +255,25 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         </div>
       </div>
 
+      {message ? (
+        <p className="mb-5 rounded-lg border border-[var(--border)] bg-[var(--accent-soft)] p-3 text-sm font-bold text-[var(--accent-strong)]">
+          {message}
+        </p>
+      ) : null}
+
+      {mutationError ? (
+        <p className="mb-5 rounded-lg border border-[color:oklch(0.72_0.08_25)] bg-[var(--danger-soft)] p-3 text-sm font-bold text-[var(--danger)]">
+          {mutationError}
+        </p>
+      ) : null}
+
+      {profileError ? (
+        <p className="mb-5 rounded-lg border border-[color:oklch(0.72_0.08_70)] bg-[var(--warning-soft)] p-3 text-sm font-bold text-[var(--warning)]">
+          Your business profile could not be loaded. Saved documents are still shown below; retry
+          before changing business defaults.
+        </p>
+      ) : null}
+
       <div className="mb-5 flex flex-wrap gap-2" aria-label="Document filters">
         <Link className={!activeType ? "segment segment-active" : "segment"} href={typeFilterHref()}>
           <Filter className="h-4 w-4" aria-hidden="true" />
@@ -276,27 +304,36 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       </div>
 
       {orderError ? (
-        <p className="mb-5 rounded-lg border border-[color:oklch(0.72_0.08_25)] bg-[var(--danger-soft)] p-3 text-sm font-bold text-[var(--danger)]">
-          {orderError.message}
-        </p>
-      ) : null}
-
-      <div className="grid gap-8">
-        {activeOrders.length > 0 ? (
-          <DocumentList orders={activeOrders} />
-        ) : (
-          <EmptyState activeType={activeType ?? undefined} />
-        )}
-
-        <section>
-          <h2 className="mb-3 text-xl font-black tracking-tight text-[var(--ink)]">Archived</h2>
-          {archivedOrders.length > 0 ? (
-            <DocumentList orders={archivedOrders} />
+        <div className="utility-panel p-5">
+          <h2 className="text-xl font-black tracking-tight text-[var(--ink)]">
+            Saved documents could not be loaded.
+          </h2>
+          <p className="mt-2 leading-7 text-[var(--ink-soft)]">
+            No records have been changed. Retry once your connection is stable.
+          </p>
+          <Link className="btn btn-primary mt-4" href="/dashboard">
+            <RotateCcw className="h-5 w-5" aria-hidden="true" />
+            Try again
+          </Link>
+        </div>
+      ) : (
+        <div className="grid gap-8">
+          {activeOrders.length > 0 ? (
+            <DocumentList orders={activeOrders} />
           ) : (
-            <EmptyState archived activeType={activeType ?? undefined} />
+            <EmptyState activeType={activeType ?? undefined} />
           )}
-        </section>
-      </div>
+
+          <section>
+            <h2 className="mb-3 text-xl font-black tracking-tight text-[var(--ink)]">Archived</h2>
+            {archivedOrders.length > 0 ? (
+              <DocumentList orders={archivedOrders} />
+            ) : (
+              <EmptyState archived activeType={activeType ?? undefined} />
+            )}
+          </section>
+        </div>
+      )}
     </section>
   );
 }

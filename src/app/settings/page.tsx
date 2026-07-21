@@ -48,7 +48,20 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
     redirect("/sign-in?next=/settings");
   }
 
-  const { data: profileRow } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+  const { data: profileRow, error: profileError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error("Settings profile query failed.", {
+      code: profileError.code,
+      message: profileError.message
+    });
+    throw new Error("The business profile could not be loaded.");
+  }
+
   const profile = profileFromRow(profileRow) ?? {
     ...defaultBusinessProfile,
     contactEmail: typeof data?.claims?.email === "string" ? data.claims.email : ""

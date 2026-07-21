@@ -97,6 +97,11 @@ export type GeneratedProjectDocument = {
   documentType: DocumentType;
   documentTypeLabel: string;
   documentTitle: string;
+  scheduleText: string;
+  scopeBoundary: string;
+  changePolicyText: string;
+  cancellationTermsText: string;
+  disclaimerText: string;
   summary: string;
   email: string;
   clientEmail: string;
@@ -194,7 +199,8 @@ function documentDefaults(documentType: DocumentType): Partial<ProjectDocumentIn
       originalScope: "",
       newRequest:
         "Install white subway tile backsplash in kitchen, including standard grout, trim, cleanup, and the approved coffee bar extension.",
-      scheduleImpact: "Work is scheduled after approval, deposit, and material availability are confirmed.",
+      scheduleImpact:
+        "Work is scheduled after approval, payment terms, and material availability are confirmed.",
       clientResponsibilities:
         "Client will provide site access, clear the work area, confirm final material selections, and respond to scheduling questions promptly."
     };
@@ -207,7 +213,7 @@ function documentDefaults(documentType: DocumentType): Partial<ProjectDocumentIn
       newRequest:
         "Provide remodeling services for the kitchen backsplash refresh according to the scope, pricing, payment terms, and exclusions in this agreement starter.",
       scheduleImpact:
-        "Work will be scheduled after agreement approval, deposit payment, material availability, and site readiness are confirmed.",
+        "Work will be scheduled after agreement approval, payment terms, material availability, and site readiness are confirmed.",
       clientResponsibilities:
         "Client will provide accurate project information, site access, timely decisions, and payment according to the approved schedule.",
       exclusions:
@@ -280,7 +286,11 @@ export function deadlineUrgency(dateString: string, referenceDate: Date = new Da
     return "normal";
   }
 
-  const referenceDay = utcCalendarDay(referenceDate.toISOString().slice(0, 10));
+  const referenceDay = utcCalendarDay(
+    `${referenceDate.getFullYear()}-${String(referenceDate.getMonth() + 1).padStart(2, "0")}-${String(
+      referenceDate.getDate()
+    ).padStart(2, "0")}`
+  );
 
   if (referenceDay === null) {
     return "normal";
@@ -348,11 +358,25 @@ export function createBlankInput(
 }
 
 export function isExampleInput(input: ProjectDocumentInput) {
+  const variableExampleFields = new Set<keyof ProjectDocumentInput>([
+    "provider",
+    "businessEmail",
+    "businessPhone",
+    "hourlyRate",
+    "marginPercent",
+    "depositPercent",
+    "paymentTiming",
+    "tone",
+    "approvalDeadline",
+    "startDate",
+    "endDate"
+  ]);
+
   return documentTypeOptions.some((option) => {
     const example = createDefaultInput(undefined, option.value);
 
     return (Object.keys(example) as Array<keyof ProjectDocumentInput>).every(
-      (field) => input[field] === example[field]
+      (field) => variableExampleFields.has(field) || input[field] === example[field]
     );
   });
 }
@@ -423,11 +447,11 @@ function dateValue(value: unknown, fallback: string) {
     return "";
   }
 
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  if (typeof value !== "string" || utcCalendarDay(value) === null) {
     return fallback;
   }
 
-  return Number.isNaN(new Date(`${value}T12:00:00`).getTime()) ? fallback : value;
+  return value;
 }
 
 function isAllowedValue<T extends string>(value: unknown, allowed: readonly T[]): value is T {
@@ -509,13 +533,19 @@ export function sanitizeChangeOrderInput(
 
 export const sanitizeProjectDocumentInput = sanitizeChangeOrderInput;
 
+export function effectiveDepositPercent(input: Pick<ProjectDocumentInput, "depositPercent" | "paymentTiming">) {
+  return input.paymentTiming === "deposit-before"
+    ? clampNumber(input.depositPercent, 0, 100)
+    : 0;
+}
+
 export function calculatePrice(input: ProjectDocumentInput): PriceBreakdown {
   const laborHours = clampNumber(input.laborHours, 0, 10000);
   const hourlyRate = clampNumber(input.hourlyRate, 0, 100000);
   const materialsCost = clampNumber(input.materialsCost, 0, 100000000);
   const marginPercent = clampNumber(input.marginPercent, 0, 80);
   const rushPercent = clampNumber(input.rushPercent, 0, 100);
-  const depositPercent = clampNumber(input.depositPercent, 0, 100);
+  const depositPercent = effectiveDepositPercent(input);
 
   const cents = (value: number) => Math.round(value * 100);
   const labor = cents(laborHours * hourlyRate);
@@ -558,15 +588,11 @@ export function formatMoney(value: number, currency = "USD") {
 }
 
 export function formatDate(value: string) {
-  if (!value) {
+  if (!value || utcCalendarDay(value) === null) {
     return "the agreed approval date";
   }
 
   const date = new Date(`${value}T12:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return "the agreed approval date";
-  }
 
   return date.toLocaleDateString("en-US", {
     month: "long",
@@ -575,23 +601,25 @@ export function formatDate(value: string) {
   });
 }
 
-function formatSchedule(input: ProjectDocumentInput) {
+export function formatSchedule(input: ProjectDocumentInput) {
   const start = input.startDate ? formatDate(input.startDate) : "";
   const end = input.endDate ? formatDate(input.endDate) : "";
+  const notes = input.scheduleImpact.trim();
+  let dateRange = "";
 
   if (start && end) {
-    return `${start} to ${end}`;
+    dateRange = `${start} to ${end}`;
+  } else if (start) {
+    dateRange = `Starts ${start}`;
+  } else if (end) {
+    dateRange = `Target completion ${end}`;
   }
 
-  if (start) {
-    return `Starts ${start}`;
+  if (dateRange && notes) {
+    return `${dateRange}. ${notes}`;
   }
 
-  if (end) {
-    return `Target completion ${end}`;
-  }
-
-  return input.scheduleImpact.trim() || "Schedule will be confirmed after approval.";
+  return dateRange || notes || "Schedule will be confirmed after approval.";
 }
 
 export function industryBoundary(industry: Industry) {
@@ -611,6 +639,33 @@ export function industryBoundary(industry: Industry) {
   };
 
   return copy[industry];
+}
+
+const serviceAgreementDisclaimer =
+  "This service agreement starter is a business template, not legal advice. Have legal terms reviewed for your location, trade, licensing rules, and contract requirements.";
+
+function serviceAgreementChangePolicy(input: ProjectDocumentInput) {
+  return (
+    input.changePolicy.trim() ||
+    documentDefaults("service-agreement").changePolicy ||
+    "Requested changes must be priced and approved in writing before they become part of the service scope."
+  );
+}
+
+function serviceAgreementCancellationTerms(input: ProjectDocumentInput) {
+  return (
+    input.cancellationTerms.trim() ||
+    documentDefaults("service-agreement").cancellationTerms ||
+    "Cancellation terms should be reviewed before use."
+  );
+}
+
+function scheduleTextForInput(input: ProjectDocumentInput) {
+  if (input.documentType === "change-order") {
+    return input.scheduleImpact.trim() || "No schedule impact noted.";
+  }
+
+  return formatSchedule(input);
 }
 
 export function toneGreeting(input: ProjectDocumentInput) {
@@ -666,6 +721,10 @@ export function paymentTerms(input: ProjectDocumentInput, breakdown: PriceBreakd
   const balance = formatMoney(breakdown.balanceAmount, input.currency);
 
   if (input.paymentTiming === "deposit-before") {
+    if (effectiveDepositPercent(input) === 0) {
+      return `No deposit is required before work begins. ${total} is due according to the approved invoice terms.`;
+    }
+
     return `${deposit} is due before the work begins. The remaining ${balance} is due according to the approved invoice terms.`;
   }
 
@@ -711,6 +770,15 @@ export function validateChangeOrder(input: ProjectDocumentInput): ValidationErro
         : `Describe the ${label} scope of work.`;
   }
 
+  if (input.documentType !== "change-order" && input.startDate && input.endDate) {
+    const startDay = utcCalendarDay(input.startDate);
+    const endDay = utcCalendarDay(input.endDate);
+
+    if (startDay !== null && endDay !== null && endDay < startDay) {
+      errors.endDate = "Completion target cannot be before the start date.";
+    }
+  }
+
   if (input.laborHours < 0) {
     errors.laborHours = "Labor hours cannot be negative.";
   }
@@ -731,7 +799,10 @@ export function validateChangeOrder(input: ProjectDocumentInput): ValidationErro
     errors.rushPercent = "Use a rush fee from 0% to 100%.";
   }
 
-  if (input.depositPercent < 0 || input.depositPercent > 100) {
+  if (
+    input.paymentTiming === "deposit-before" &&
+    (input.depositPercent < 0 || input.depositPercent > 100)
+  ) {
     errors.depositPercent = "Use a deposit from 0% to 100%.";
   }
 
@@ -809,6 +880,12 @@ function priceLines(input: ProjectDocumentInput, breakdown: PriceBreakdown) {
 }
 
 function summaryLines(input: ProjectDocumentInput, breakdown: PriceBreakdown) {
+  const depositPercent = effectiveDepositPercent(input);
+  const depositSummary =
+    depositPercent > 0
+      ? `Deposit required: ${depositPercent}% = ${formatMoney(breakdown.depositAmount, input.currency)}`
+      : "Deposit required: None for the selected payment timing.";
+
   return [
     `Business: ${input.provider || "Your business"}`,
     `Contact: ${contactLine(input)}`,
@@ -823,7 +900,7 @@ function summaryLines(input: ProjectDocumentInput, breakdown: PriceBreakdown) {
     `Markup + overhead allowance: ${clampNumber(input.marginPercent, 0, 80)}% = ${formatMoney(breakdown.marginAmount, input.currency)}`,
     `Rush + disruption fee: ${clampNumber(input.rushPercent, 0, 100)}% = ${formatMoney(breakdown.rushAmount, input.currency)}`,
     `Total: ${formatMoney(breakdown.total, input.currency)}`,
-    `Deposit required: ${clampNumber(input.depositPercent, 0, 100)}% = ${formatMoney(breakdown.depositAmount, input.currency)}`
+    depositSummary
   ];
 }
 
@@ -930,6 +1007,17 @@ function generateWorkOrderDocument(input: ProjectDocumentInput, breakdown: Price
   const exclusions = input.exclusions.trim() || "No additional exclusions listed.";
   const responsibilities =
     input.clientResponsibilities.trim() || "Client responsibilities will be confirmed before scheduling.";
+  const hasDeposit = effectiveDepositPercent(input) > 0;
+  const paymentChecklist = hasDeposit
+    ? "Collect the required deposit before ordering materials or reserving labor."
+    : input.paymentTiming === "completion"
+      ? "Confirm the full amount is due when the work is complete."
+      : input.paymentTiming === "next-invoice"
+        ? "Confirm the approved amount will be added to the next invoice."
+        : "Confirm the full amount and invoice terms before scheduling.";
+  const followUpApprovalItems = hasDeposit
+    ? "scope, schedule, payment terms, and deposit"
+    : "scope, schedule, and payment terms";
   const summary = [
     ...summaryLines(input, breakdown),
     "",
@@ -960,6 +1048,7 @@ function generateWorkOrderDocument(input: ProjectDocumentInput, breakdown: Price
     `Project: ${input.project || "Project"}`,
     `Job location: ${input.jobLocation || "Location not provided"}`,
     `Schedule: ${schedule}`,
+    `Approval deadline: ${formatDate(input.approvalDeadline)}`,
     "",
     "1. SCOPE OF WORK",
     scopeText(input),
@@ -999,7 +1088,7 @@ function generateWorkOrderDocument(input: ProjectDocumentInput, breakdown: Price
     followUpTemplate: [
       toneGreeting(input),
       "",
-      `I wanted to follow up on the work order for ${input.project || "the project"}. Once the scope, schedule, payment terms, and deposit are approved, I can move it into the job schedule.`,
+      `I wanted to follow up on the work order for ${input.project || "the project"}. Once the ${followUpApprovalItems} are approved, I can move it into the job schedule.`,
       "",
       'A reply with "Approved" is enough for me to prepare the job record.',
       "",
@@ -1009,7 +1098,7 @@ function generateWorkOrderDocument(input: ProjectDocumentInput, breakdown: Price
     checklist: [
       "Confirm the work order scope matches the job you intend to perform.",
       "List site access, client decisions, and owner-supplied materials before scheduling.",
-      "Collect the required deposit before ordering materials or reserving labor.",
+      paymentChecklist,
       "Attach the approved work order to the job file and invoice.",
       "Use a separate change order if the client adds scope after approval."
     ]
@@ -1024,16 +1113,9 @@ function generateServiceAgreementDocument(input: ProjectDocumentInput, breakdown
   const exclusions = input.exclusions.trim() || "No additional exclusions listed.";
   const responsibilities =
     input.clientResponsibilities.trim() || "Client responsibilities will be confirmed before work begins.";
-  const changePolicy =
-    input.changePolicy.trim() ||
-    documentDefaults("service-agreement").changePolicy ||
-    "Requested changes must be priced and approved in writing before they become part of the service scope.";
-  const cancellationTerms =
-    input.cancellationTerms.trim() ||
-    documentDefaults("service-agreement").cancellationTerms ||
-    "Cancellation terms should be reviewed before use.";
-  const disclaimer =
-    "This service agreement starter is a business template, not legal advice. Have legal terms reviewed for your location, trade, licensing rules, and contract requirements.";
+  const changePolicy = serviceAgreementChangePolicy(input);
+  const cancellationTerms = serviceAgreementCancellationTerms(input);
+  const disclaimer = serviceAgreementDisclaimer;
   const summary = [
     ...summaryLines(input, breakdown),
     "",
@@ -1073,6 +1155,7 @@ function generateServiceAgreementDocument(input: ProjectDocumentInput, breakdown
     `Project: ${input.project || "Project"}`,
     `Service location: ${input.jobLocation || "Location not provided"}`,
     `Estimated schedule: ${schedule}`,
+    `Approval deadline: ${formatDate(input.approvalDeadline)}`,
     "",
     "1. SERVICE SCOPE",
     scopeText(input),
@@ -1143,6 +1226,10 @@ export function generateChangeOrder(input: ProjectDocumentInput): GeneratedProje
   const breakdown = calculatePrice(clean);
   const documentTitle = titleForInput(clean);
   const label = documentTypeLabel(clean.documentType);
+  const scheduleText = scheduleTextForInput(clean);
+  const scopeBoundary = industryBoundary(clean.industry);
+  const changePolicyText = serviceAgreementChangePolicy(clean);
+  const cancellationTermsText = serviceAgreementCancellationTerms(clean);
   const generated =
     clean.documentType === "work-order"
       ? generateWorkOrderDocument(clean, breakdown)
@@ -1165,7 +1252,7 @@ export function generateChangeOrder(input: ProjectDocumentInput): GeneratedProje
     generated.approvalText,
     "",
     "SCOPE BOUNDARY",
-    industryBoundary(clean.industry),
+    scopeBoundary,
     "",
     "Thanks,",
     clean.provider || "Your business"
@@ -1190,6 +1277,11 @@ export function generateChangeOrder(input: ProjectDocumentInput): GeneratedProje
     documentType: clean.documentType,
     documentTypeLabel: label,
     documentTitle,
+    scheduleText,
+    scopeBoundary,
+    changePolicyText,
+    cancellationTermsText,
+    disclaimerText: serviceAgreementDisclaimer,
     summary: generated.summary,
     email: clientEmail,
     clientEmail,

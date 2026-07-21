@@ -12,6 +12,7 @@ type Props = {
   exampleInput: boolean;
   total: number;
   deposit: number;
+  depositRequired: boolean;
   currency: string;
   approvalDeadline: string;
   approvalUrgency: DeadlineUrgency;
@@ -24,6 +25,7 @@ export function DraftSummaryCard({
   exampleInput,
   total,
   deposit,
+  depositRequired,
   currency,
   approvalDeadline,
   approvalUrgency,
@@ -62,9 +64,9 @@ export function DraftSummaryCard({
         </div>
       </div>
       <div className="ledger-row">
-        <span className="text-sm text-[var(--muted)]">Deposit due</span>
+        <span className="text-sm text-[var(--muted)]">Deposit</span>
         <strong className="font-mono text-sm text-[var(--accent-strong)]">
-          {formatMoney(deposit, currency)}
+          {depositRequired ? formatMoney(deposit, currency) : "Not required"}
         </strong>
       </div>
       <div className="ledger-row">

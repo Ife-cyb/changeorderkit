@@ -54,6 +54,8 @@ export function SiteNavigation({ isSignedIn, showUpsells }: SiteNavigationProps)
       return;
     }
 
+    const desktopViewport = window.matchMedia("(min-width: 768px)");
+
     const panel = panelRef.current;
     const previousOverflow = document.body.style.overflow;
     const focusable = panel?.querySelectorAll<HTMLElement>(
@@ -85,11 +87,19 @@ export function SiteNavigation({ isSignedIn, showUpsells }: SiteNavigationProps)
       }
     }
 
+    function handleViewportChange(event: MediaQueryListEvent) {
+      if (event.matches) {
+        setMobileOpen(false);
+      }
+    }
+
     document.addEventListener("keydown", handleKeyDown);
+    desktopViewport.addEventListener("change", handleViewportChange);
 
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
+      desktopViewport.removeEventListener("change", handleViewportChange);
     };
   }, [mobileOpen]);
 

@@ -193,7 +193,6 @@ export function buildChangeOrderUpdate(input: ChangeOrderInput): ChangeOrderUpda
     input: insert.input,
     total: insert.total,
     currency: insert.currency,
-    status: insert.status,
     updated_at: insert.updated_at
   };
 }

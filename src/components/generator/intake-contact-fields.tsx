@@ -130,8 +130,12 @@ export function IntakeContactFields({
           className="field-control field-control-emphasis"
           value={input.project}
           placeholder="Oak Street kitchen"
+          aria-invalid={Boolean(errors.project)}
+          aria-describedby={errors.project ? "project-error" : undefined}
+          ref={(node) => registerFirstError("project", node)}
           onChange={(event) => setProjectName(event.target.value)}
         />
+        <InputError id="project-error" message={errors.project} />
       </label>
 
       {!isChangeOrder ? (
@@ -163,8 +167,13 @@ export function IntakeContactFields({
               className="field-control"
               type="date"
               value={input.endDate}
+              min={input.startDate || undefined}
+              aria-invalid={Boolean(errors.endDate)}
+              aria-describedby={errors.endDate ? "endDate-error" : undefined}
+              ref={(node) => registerFirstError("endDate", node)}
               onChange={(event) => setTextField("endDate", event.target.value)}
             />
+            <InputError id="endDate-error" message={errors.endDate} />
           </label>
         </>
       ) : null}

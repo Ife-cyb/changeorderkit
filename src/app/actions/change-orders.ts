@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import {
   duplicateChangeOrderWithRepository,
   saveChangeOrderWithRepository,
@@ -59,6 +60,24 @@ function refreshSavedWork(id?: string | null) {
   }
 }
 
+function search(path: string, values: Record<string, string>) {
+  const params = new URLSearchParams(values);
+  return `${path}?${params.toString()}`;
+}
+
+function redirectForContextError(error: string): never {
+  redirect(search("/sign-in", { next: "/dashboard", error }));
+}
+
+function finishDashboardMutation(result: ChangeOrderActionResult, message: string): never {
+  if (!result.ok) {
+    redirect(search("/dashboard", { error: result.error }));
+  }
+
+  refreshSavedWork(result.id);
+  redirect(search("/dashboard", { message }));
+}
+
 export async function saveChangeOrderAction(
   input: ChangeOrderInput,
   id?: string | null
@@ -73,54 +92,84 @@ export async function saveChangeOrderAction(
   }
 
   const result = await saveChangeOrderWithRepository(context.repository, context.userId, input, id);
-  refreshSavedWork(result.ok ? result.id : id);
+
+  if (result.ok) {
+    refreshSavedWork(result.id);
+  }
+
   return result;
 }
 
 export async function archiveChangeOrderFormAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
+  const id = String(formData.get("id") ?? "").trim();
   const context = await actionContext();
 
-  if (!context.ok || !id) {
-    return;
+  if (!context.ok) {
+    redirectForContextError(context.error);
   }
 
-  await updateChangeOrderStatusWithRepository(context.repository, context.userId, id, "archived");
-  refreshSavedWork(id);
+  if (!id) {
+    redirect(search("/dashboard", { error: "Choose a document to archive." }));
+  }
+
+  const result = await updateChangeOrderStatusWithRepository(
+    context.repository,
+    context.userId,
+    id,
+    "archived"
+  );
+  finishDashboardMutation(result, "Document archived.");
 }
 
 export async function reopenChangeOrderFormAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
+  const id = String(formData.get("id") ?? "").trim();
   const context = await actionContext();
 
-  if (!context.ok || !id) {
-    return;
+  if (!context.ok) {
+    redirectForContextError(context.error);
   }
 
-  await updateChangeOrderStatusWithRepository(context.repository, context.userId, id, "draft");
-  refreshSavedWork(id);
+  if (!id) {
+    redirect(search("/dashboard", { error: "Choose a document to reopen." }));
+  }
+
+  const result = await updateChangeOrderStatusWithRepository(
+    context.repository,
+    context.userId,
+    id,
+    "draft"
+  );
+  finishDashboardMutation(result, "Document reopened.");
 }
 
 export async function duplicateChangeOrderFormAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
+  const id = String(formData.get("id") ?? "").trim();
   const context = await actionContext();
 
-  if (!context.ok || !id) {
-    return;
+  if (!context.ok) {
+    redirectForContextError(context.error);
+  }
+
+  if (!id) {
+    redirect(search("/dashboard", { error: "Choose a document to duplicate." }));
   }
 
   const result = await duplicateChangeOrderWithRepository(context.repository, context.userId, id);
-  refreshSavedWork(result.ok ? result.id : id);
+  finishDashboardMutation(result, "Document duplicated.");
 }
 
 export async function deleteChangeOrderFormAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
+  const id = String(formData.get("id") ?? "").trim();
   const context = await actionContext();
 
-  if (!context.ok || !id) {
-    return;
+  if (!context.ok) {
+    redirectForContextError(context.error);
   }
 
-  await deleteChangeOrderWithRepository(context.repository, context.userId, id);
-  refreshSavedWork(id);
+  if (!id) {
+    redirect(search("/dashboard", { error: "Choose a document to delete." }));
+  }
+
+  const result = await deleteChangeOrderWithRepository(context.repository, context.userId, id);
+  finishDashboardMutation(result, "Document deleted.");
 }

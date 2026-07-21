@@ -30,7 +30,15 @@ export async function updateProfileAction(formData: FormData) {
   const { error: profileError } = await supabase.from("profiles").upsert(profile);
 
   if (profileError) {
-    redirect(search("/settings", { error: profileError.message }));
+    console.error("Settings profile update failed.", {
+      code: profileError.code,
+      message: profileError.message
+    });
+    redirect(
+      search("/settings", {
+        error: "Business defaults could not be saved. Please try again."
+      })
+    );
   }
 
   revalidatePath("/");

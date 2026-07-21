@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createDefaultInput, defaultInput } from "../src/lib/change-order";
 import {
   type ChangeOrderRepository,
@@ -71,6 +71,7 @@ class FakeRepository implements ChangeOrderRepository {
 
     if (row && row.user_id === userId) {
       this.rows.delete(id);
+      return { data: row, error: null };
     }
 
     return { data: null, error: null };
@@ -108,6 +109,58 @@ describe("change order save actions with mocked repositories", () => {
     expect(updated.ok ? updated.changeOrder?.title : "").toBe("Updated title");
   });
 
+  it("rejects malformed or invalid input before calling the repository", async () => {
+    const repository = new FakeRepository();
+    const malformed = await saveChangeOrderWithRepository(repository, "user_1", {});
+    const incomplete = await saveChangeOrderWithRepository(repository, "user_1", {
+      ...defaultInput,
+      project: ""
+    });
+    const invalidPrice = await saveChangeOrderWithRepository(repository, "user_1", {
+      ...defaultInput,
+      laborHours: -1
+    });
+
+    expect(malformed.ok).toBe(false);
+    expect(incomplete.ok).toBe(false);
+    expect(invalidPrice.ok).toBe(false);
+    expect(repository.rows.size).toBe(0);
+  });
+
+  it("does not expose repository implementation details to callers", async () => {
+    const repository = new FakeRepository();
+    const internalMessage = 'relation "private_change_orders_v2" does not exist';
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(repository as ChangeOrderRepository, "insert").mockResolvedValue({
+      data: null,
+      error: { message: internalMessage }
+    });
+
+    const result = await saveChangeOrderWithRepository(repository, "user_1", defaultInput);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "The document request could not be completed. Please try again."
+    });
+    expect(JSON.stringify(result)).not.toContain(internalMessage);
+    expect(log).toHaveBeenCalledWith("Change order repository request failed.", {
+      message: internalMessage
+    });
+    log.mockRestore();
+  });
+
+  it("sanitizes document input before persistence", async () => {
+    const repository = new FakeRepository();
+    const result = await saveChangeOrderWithRepository(repository, "user_1", {
+      ...defaultInput,
+      documentTitle: `Safe\0${"x".repeat(300)}`
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.ok ? result.changeOrder?.title.includes("\0") : true).toBe(false);
+    expect(result.ok ? result.changeOrder?.title.length : 0).toBe(180);
+  });
+
   it("preserves document type when saving and duplicating documents", async () => {
     const repository = new FakeRepository();
     const workOrder = createDefaultInput(undefined, "work-order");
@@ -121,6 +174,21 @@ describe("change order save actions with mocked repositories", () => {
 
     expect(duplicated.ok ? duplicated.changeOrder?.documentType : "").toBe("work-order");
     expect(duplicated.ok ? duplicated.changeOrder?.input.documentType : "").toBe("work-order");
+  });
+
+  it("keeps a copy suffix when duplicating a maximum-length title", async () => {
+    const repository = new FakeRepository();
+    const saved = await saveChangeOrderWithRepository(repository, "user_1", {
+      ...defaultInput,
+      documentTitle: "x".repeat(180)
+    });
+    const id = saved.ok ? saved.id ?? "" : "";
+    const duplicated = await duplicateChangeOrderWithRepository(repository, "user_1", id);
+    const duplicateTitle = duplicated.ok ? duplicated.changeOrder?.title ?? "" : "";
+
+    expect(duplicateTitle).toHaveLength(180);
+    expect(duplicateTitle.endsWith(" copy")).toBe(true);
+    expect(duplicateTitle).not.toBe("x".repeat(180));
   });
 
   it("blocks wrong-owner updates", async () => {
@@ -157,5 +225,34 @@ describe("change order save actions with mocked repositories", () => {
     const deleted = await deleteChangeOrderWithRepository(repository, "user_1", id);
     expect(deleted.ok).toBe(true);
     expect(repository.rows.has(id)).toBe(false);
+  });
+
+  it("preserves status when saving ordinary content updates", async () => {
+    const repository = new FakeRepository();
+    const saved = await saveChangeOrderWithRepository(repository, "user_1", defaultInput);
+    const id = saved.ok ? saved.id ?? "" : "";
+
+    await updateChangeOrderStatusWithRepository(repository, "user_1", id, "archived");
+    const updated = await saveChangeOrderWithRepository(
+      repository,
+      "user_1",
+      { ...defaultInput, documentTitle: "Edited archived document" },
+      id
+    );
+
+    expect(updated.ok ? updated.changeOrder?.status : "").toBe("archived");
+  });
+
+  it("reports missing or wrong-owner deletes instead of false success", async () => {
+    const repository = new FakeRepository();
+    const saved = await saveChangeOrderWithRepository(repository, "owner", defaultInput);
+    const id = saved.ok ? saved.id ?? "" : "";
+
+    const wrongOwner = await deleteChangeOrderWithRepository(repository, "other-user", id);
+    const missing = await deleteChangeOrderWithRepository(repository, "owner", "missing");
+
+    expect(wrongOwner.ok).toBe(false);
+    expect(missing.ok).toBe(false);
+    expect(repository.rows.has(id)).toBe(true);
   });
 });
