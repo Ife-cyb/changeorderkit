@@ -683,7 +683,7 @@ export function ChangeOrderGenerator({
 
   return (
     <section id="generator" className="tool-shell scroll-mt-24 py-5 sm:py-10" aria-label="Document generator">
-      <div className="mb-4 grid gap-4 sm:mb-6 sm:gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.45fr)] lg:items-end">
+      <div className="generator-intro no-print mb-4 grid gap-4 sm:mb-6 sm:gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.45fr)] lg:items-end">
         <div>
           <p className="panel-kicker mb-3">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
