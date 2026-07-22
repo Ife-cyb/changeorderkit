@@ -46,6 +46,7 @@ import {
   type ValidationErrors
 } from "@/lib/change-order";
 import { funnelEvents, totalBucket } from "@/lib/funnel";
+import { FREE_DOCUMENT_LIMIT_REACHED } from "@/lib/change-order-service";
 import {
   automaticDocumentTitle,
   saveCompletionState,
@@ -65,6 +66,7 @@ type Props = {
   businessProfile?: BusinessProfile | null;
   useLocalDraft?: boolean;
   headingLevel?: "h1" | "h2";
+  canCreateCloudDocument?: boolean;
 };
 
 const storageKey = "changeorderkit:draft:v2";
@@ -246,7 +248,8 @@ export function ChangeOrderGenerator({
   isSignedIn = false,
   businessProfile,
   useLocalDraft = true,
-  headingLevel = "h1"
+  headingLevel = "h1",
+  canCreateCloudDocument = true
 }: Props) {
   const router = useRouter();
   const [input, setInput] = useState<ChangeOrderInput>(() =>
@@ -263,6 +266,7 @@ export function ChangeOrderGenerator({
   const [autosaveClock, setAutosaveClock] = useState(() => Date.now());
   const [outputMode, setOutputMode] = useState<OutputMode>("document");
   const [isSaving, startSaving] = useTransition();
+  const [saveLimitReached, setSaveLimitReached] = useState(false);
   const intakeRef = useRef<HTMLFormElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
@@ -294,6 +298,8 @@ export function ChangeOrderGenerator({
   const activeCopy = documentCopy[input.documentType];
   const documentLabel = documentTypeLabel(input.documentType);
   const documentLabelLower = documentLabel.toLowerCase();
+  const cloudSaveBlocked =
+    !currentOrderId && (!canCreateCloudDocument || saveLimitReached);
   const isChangeOrder = input.documentType === "change-order";
   const isServiceAgreement = input.documentType === "service-agreement";
   const sectionReadiness = useMemo<Record<GuidedSectionId, boolean>>(
@@ -598,10 +604,14 @@ export function ChangeOrderGenerator({
         const result = await saveChangeOrderAction(input, currentOrderId || null);
 
         if (!result.ok) {
+          if (result.code === FREE_DOCUMENT_LIMIT_REACHED) {
+            setSaveLimitReached(true);
+          }
           showToast(result.error);
           return;
         }
 
+        setSaveLimitReached(false);
         savedRevisionRef.current = revisionAtSave;
         const { hasNewerEdits, shouldNavigateToSavedDocument } = saveCompletionState(
           revisionAtSave,
@@ -982,6 +992,25 @@ export function ChangeOrderGenerator({
             />
           </fieldset>
 
+          {cloudSaveBlocked ? (
+            <div
+              id="cloud-save-limit-notice"
+              className="mx-4 mb-4 rounded-lg border border-[var(--border)] bg-[var(--accent-soft)] p-3 text-sm leading-6 text-[var(--ink-soft)] sm:mx-5"
+              role="status"
+            >
+              <strong className="block font-black text-[var(--ink)]">
+                Free cloud-save limit reached.
+              </strong>
+              <span>
+                {useLocalDraft
+                  ? "Your work remains in this generator and browser autosave continues. "
+                  : "Your work remains in this editor while it is open. "}
+                Copy, download, and Print/PDF remain available. Delete a saved document to free a
+                cloud slot.
+              </span>
+            </div>
+          ) : null}
+
           <div className="guided-form-actions">
             <div>
               <strong>Your client document is already taking shape.</strong>
@@ -990,12 +1019,19 @@ export function ChangeOrderGenerator({
             <div className="guided-form-action-buttons">
             <button
               type="button"
-              className="btn btn-secondary"
+              className={cloudSaveBlocked ? "btn btn-disabled" : "btn btn-secondary"}
               onClick={saveToAccount}
-              disabled={isSaving}
+              disabled={isSaving || cloudSaveBlocked}
+              aria-describedby={cloudSaveBlocked ? "cloud-save-limit-notice" : undefined}
             >
               <Save className="h-5 w-5" aria-hidden="true" />
-              {isSaving ? "Saving draft" : currentOrderId ? "Save changes" : "Save draft"}
+              {isSaving
+                ? "Saving draft"
+                : currentOrderId
+                  ? "Save changes"
+                  : cloudSaveBlocked
+                    ? "Cloud save limit reached"
+                    : "Save draft"}
             </button>
             <button type="submit" className="btn btn-primary">
               Review {documentLabelLower}

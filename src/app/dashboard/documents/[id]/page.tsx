@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { ChangeOrderGenerator } from "@/components/change-order-generator";
 import { SetupNotice } from "@/components/setup-notice";
 import { changeOrderFromRow, profileFromRow } from "@/lib/change-order-records";
+import { resolveAccountEntitlement } from "@/lib/account-entitlements.server";
 import { createDefaultInput, sanitizeDocumentType } from "@/lib/change-order";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -42,11 +43,10 @@ export default async function SavedDocumentPage({
     redirect(`/sign-in?next=${encodeURIComponent(requestedPath)}`);
   }
 
-  const { data: profileRow, error: profileError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .maybeSingle();
+  const [{ data: profileRow, error: profileError }, entitlement] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    id === "new" ? resolveAccountEntitlement(supabase, userId) : Promise.resolve(null)
+  ]);
 
   if (profileError) {
     console.error("Document editor profile query failed.", {
@@ -68,6 +68,7 @@ export default async function SavedDocumentPage({
         showUpsells={process.env.NEXT_PUBLIC_SHOW_UPSELLS === "true"}
         pilotLink={process.env.NEXT_PUBLIC_PILOT_LINK || process.env.NEXT_PUBLIC_PAYMENT_LINK}
         templateKitLink={process.env.NEXT_PUBLIC_TEMPLATE_KIT_LINK}
+        canCreateCloudDocument={entitlement?.canCreateDocument ?? false}
       />
     );
   }
