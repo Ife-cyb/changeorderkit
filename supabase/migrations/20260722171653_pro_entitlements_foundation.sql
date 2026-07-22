@@ -1,3 +1,5 @@
+begin;
+
 create schema if not exists private;
 
 revoke all on schema private from public, anon, authenticated;
@@ -52,8 +54,8 @@ create table private.saved_document_usage (
 
 revoke all on table private.saved_document_usage from public, anon, authenticated;
 
--- Supabase migrations run transactionally. Hold this lock through the usage
--- backfill and trigger installation so concurrent writes cannot drift the count.
+-- This migration deliberately opens an explicit transaction so this lock covers
+-- the usage backfill and trigger installation without concurrent count drift.
 lock table public.change_orders in share row exclusive mode;
 
 insert into private.saved_document_usage (user_id, document_count)
@@ -187,3 +189,5 @@ drop trigger if exists release_saved_document_slot_after_delete on public.change
 create trigger release_saved_document_slot_after_delete
 after delete on public.change_orders
 for each row execute function private.release_saved_document_slot();
+
+commit;
