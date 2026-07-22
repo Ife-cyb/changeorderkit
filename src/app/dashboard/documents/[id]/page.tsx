@@ -3,6 +3,7 @@ import { ChangeOrderGenerator } from "@/components/change-order-generator";
 import { SetupNotice } from "@/components/setup-notice";
 import { changeOrderFromRow, profileFromRow } from "@/lib/change-order-records";
 import { resolveAccountEntitlement } from "@/lib/account-entitlements.server";
+import { accountNewDraftStorageKey } from "@/lib/generator-state";
 import { createDefaultInput, sanitizeDocumentType } from "@/lib/change-order";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -64,11 +65,12 @@ export default async function SavedDocumentPage({
         initialInput={createDefaultInput(profile ?? undefined, documentType ?? "change-order")}
         isSignedIn
         businessProfile={profile}
-        useLocalDraft={false}
+        useLocalDraft
+        localDraftStorageKey={accountNewDraftStorageKey(userId)}
         showUpsells={process.env.NEXT_PUBLIC_SHOW_UPSELLS === "true"}
         pilotLink={process.env.NEXT_PUBLIC_PILOT_LINK || process.env.NEXT_PUBLIC_PAYMENT_LINK}
         templateKitLink={process.env.NEXT_PUBLIC_TEMPLATE_KIT_LINK}
-        canCreateCloudDocument={entitlement?.canCreateDocument ?? false}
+        cloudSaveBlockReason={entitlement?.cloudSaveBlockReason ?? "verification_unavailable"}
       />
     );
   }

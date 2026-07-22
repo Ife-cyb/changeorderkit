@@ -52,6 +52,10 @@ create table private.saved_document_usage (
 
 revoke all on table private.saved_document_usage from public, anon, authenticated;
 
+-- Supabase migrations run transactionally. Hold this lock through the usage
+-- backfill and trigger installation so concurrent writes cannot drift the count.
+lock table public.change_orders in share row exclusive mode;
+
 insert into private.saved_document_usage (user_id, document_count)
 select user_id, count(*)
 from public.change_orders
@@ -72,7 +76,8 @@ begin
 end;
 $$;
 
-revoke all on function private.set_subscription_updated_at() from public, anon, authenticated;
+revoke all on function private.set_subscription_updated_at()
+from public, anon, authenticated, service_role;
 
 drop trigger if exists set_subscription_updated_at on public.subscriptions;
 create trigger set_subscription_updated_at
@@ -143,7 +148,8 @@ begin
 end;
 $$;
 
-revoke all on function private.enforce_saved_document_limit() from public, anon, authenticated;
+revoke all on function private.enforce_saved_document_limit()
+from public, anon, authenticated, service_role;
 
 create or replace function private.release_saved_document_slot()
 returns trigger
@@ -151,7 +157,14 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  request_user_id uuid := (select auth.uid());
 begin
+  if request_user_id is not null and request_user_id <> old.user_id then
+    raise insufficient_privilege using
+      message = 'A saved-document slot can only be released for the authenticated user.';
+  end if;
+
   update private.saved_document_usage
   set
     document_count = greatest(document_count - 1, 0),
@@ -162,11 +175,12 @@ begin
 end;
 $$;
 
-revoke all on function private.release_saved_document_slot() from public, anon, authenticated;
+revoke all on function private.release_saved_document_slot()
+from public, anon, authenticated, service_role;
 
-drop trigger if exists enforce_saved_document_limit_before_insert on public.change_orders;
-create trigger enforce_saved_document_limit_before_insert
-before insert on public.change_orders
+drop trigger if exists enforce_saved_document_limit_after_insert on public.change_orders;
+create trigger enforce_saved_document_limit_after_insert
+after insert on public.change_orders
 for each row execute function private.enforce_saved_document_limit();
 
 drop trigger if exists release_saved_document_slot_after_delete on public.change_orders;

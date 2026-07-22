@@ -40,7 +40,10 @@ describe("account entitlement policy", () => {
       plan: "free",
       subscriptionStatus: "inactive",
       hasProAccess: false,
-      savedDocumentLimit: FREE_SAVED_DOCUMENT_LIMIT
+      savedDocumentLimit: FREE_SAVED_DOCUMENT_LIMIT,
+      subscriptionVerified: true,
+      savedDocumentCountVerified: true,
+      cloudSaveBlockReason: null
     });
   });
 
@@ -95,7 +98,8 @@ describe("account entitlement policy", () => {
     expect(resolve(null, 2).canCreateDocument).toBe(true);
     expect(resolve(null, 3)).toMatchObject({
       savedDocumentLimit: 3,
-      canCreateDocument: false
+      canCreateDocument: false,
+      cloudSaveBlockReason: "free_limit_reached"
     });
     expect(resolve(subscription(), 300)).toMatchObject({
       savedDocumentLimit: null,
@@ -126,7 +130,9 @@ describe("account entitlement policy", () => {
     ).toMatchObject({
       plan: "free",
       savedDocumentCount: 3,
-      canCreateDocument: false
+      canCreateDocument: false,
+      savedDocumentCountVerified: false,
+      cloudSaveBlockReason: "verification_unavailable"
     });
   });
 });

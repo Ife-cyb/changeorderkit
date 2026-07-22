@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createBlankInput, createDefaultInput } from "../src/lib/change-order";
 import {
+  accountNewDraftStorageKey,
   automaticDocumentTitle,
   saveCompletionState,
   transitionDocumentType
@@ -86,5 +87,15 @@ describe("generator save completion", () => {
       hasNewerEdits: true,
       shouldNavigateToSavedDocument: false
     });
+  });
+});
+
+describe("account-new browser draft isolation", () => {
+  it("uses a different browser storage key for each authenticated user", () => {
+    const first = accountNewDraftStorageKey("11111111-1111-4111-8111-111111111111");
+    const second = accountNewDraftStorageKey("22222222-2222-4222-8222-222222222222");
+
+    expect(first).not.toBe(second);
+    expect(first).toContain("11111111-1111-4111-8111-111111111111");
   });
 });

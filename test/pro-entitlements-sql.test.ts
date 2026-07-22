@@ -56,7 +56,8 @@ describe("Pro entitlement migration", () => {
     expect(migration).toContain("insert into private.saved_document_usage as usage");
     expect(migration).toContain("on conflict (user_id) do update");
     expect(migration).toContain("document_count = usage.document_count + 1");
-    expect(migration).toContain("before insert on public.change_orders");
+    expect(migration).toContain("lock table public.change_orders in share row exclusive mode");
+    expect(migration).toContain("after insert on public.change_orders");
     expect(migration).toContain("after delete on public.change_orders");
     expect(migration).not.toContain("before update on public.change_orders");
     expect(migration).toContain("message = 'free_document_limit_reached'");
@@ -66,7 +67,7 @@ describe("Pro entitlement migration", () => {
     expect(migration.match(/security definer/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(migration.match(/set search_path = ''/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(migration).toContain(
-      "revoke all on function private.enforce_saved_document_limit() from public, anon, authenticated"
+      "revoke all on function private.enforce_saved_document_limit()\nfrom public, anon, authenticated, service_role"
     );
     expect(migration).toContain("subscription.status in ('active', 'trialing')");
     expect(migration).toContain("subscription.status = 'cancelled'");

@@ -152,7 +152,7 @@ function DocumentList({
                   className="btn btn-disabled w-full"
                   type="button"
                   disabled
-                  aria-describedby="free-document-limit-notice"
+                  aria-describedby="cloud-document-creation-notice"
                 >
                   <Copy className="h-5 w-5" aria-hidden="true" />
                   Duplicate unavailable

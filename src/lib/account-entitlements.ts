@@ -26,6 +26,9 @@ export type AccountEntitlement = {
   canCreateDocument: boolean;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  subscriptionVerified: boolean;
+  savedDocumentCountVerified: boolean;
+  cloudSaveBlockReason: "free_limit_reached" | "verification_unavailable" | null;
 };
 
 type EntitlementSnapshotInput = {
@@ -82,6 +85,14 @@ export function resolveEntitlementSnapshot(
       ? Math.max(0, Math.trunc(savedDocumentCount))
       : FREE_SAVED_DOCUMENT_LIMIT;
   const savedDocumentLimit = hasProAccess ? null : FREE_SAVED_DOCUMENT_LIMIT;
+  const canCreateDocument =
+    savedDocumentLimit === null ||
+    (savedDocumentCountVerified && normalizedCount < savedDocumentLimit);
+  const cloudSaveBlockReason = canCreateDocument
+    ? null
+    : !subscriptionVerified || !savedDocumentCountVerified
+      ? "verification_unavailable"
+      : "free_limit_reached";
 
   return {
     plan: hasProAccess ? "pro" : "free",
@@ -89,8 +100,11 @@ export function resolveEntitlementSnapshot(
     hasProAccess,
     savedDocumentCount: normalizedCount,
     savedDocumentLimit,
-    canCreateDocument: savedDocumentLimit === null || normalizedCount < savedDocumentLimit,
+    canCreateDocument,
     currentPeriodEnd: verifiedSubscription?.current_period_end ?? null,
-    cancelAtPeriodEnd: verifiedSubscription?.cancel_at_period_end ?? false
+    cancelAtPeriodEnd: verifiedSubscription?.cancel_at_period_end ?? false,
+    subscriptionVerified,
+    savedDocumentCountVerified,
+    cloudSaveBlockReason
   };
 }

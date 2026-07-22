@@ -13,7 +13,7 @@ export async function resolveAccountEntitlement(
   userId: string,
   now: Date = new Date()
 ): Promise<AccountEntitlement> {
-  const [subscriptionResult, documentCountResult] = await Promise.all([
+  const [subscriptionRequest, documentCountRequest] = await Promise.allSettled([
     supabase
       .from("subscriptions")
       .select("plan,status,current_period_end,cancel_at_period_end")
@@ -25,28 +25,43 @@ export async function resolveAccountEntitlement(
       .eq("user_id", userId)
   ]);
 
-  if (subscriptionResult.error) {
+  const subscriptionResult =
+    subscriptionRequest.status === "fulfilled" ? subscriptionRequest.value : null;
+  const documentCountResult =
+    documentCountRequest.status === "fulfilled" ? documentCountRequest.value : null;
+
+  if (!subscriptionResult || subscriptionResult.error) {
     console.error("Account entitlement lookup failed; using Free access.", {
-      code: subscriptionResult.error.code,
-      message: subscriptionResult.error.message
+      code: subscriptionResult?.error?.code ?? "REQUEST_REJECTED",
+      message:
+        subscriptionResult?.error?.message ??
+        (subscriptionRequest.status === "rejected" && subscriptionRequest.reason instanceof Error
+          ? subscriptionRequest.reason.message
+          : "The entitlement request did not complete.")
     });
   }
 
-  if (documentCountResult.error) {
+  if (!documentCountResult || documentCountResult.error) {
     console.error("Saved document count lookup failed; blocking new cloud saves safely.", {
-      code: documentCountResult.error.code,
-      message: documentCountResult.error.message
+      code: documentCountResult?.error?.code ?? "REQUEST_REJECTED",
+      message:
+        documentCountResult?.error?.message ??
+        (documentCountRequest.status === "rejected" && documentCountRequest.reason instanceof Error
+          ? documentCountRequest.reason.message
+          : "The saved-document count request did not complete.")
     });
   }
 
   return resolveEntitlementSnapshot(
     {
-      subscription: subscriptionResult.error
+      subscription: !subscriptionResult || subscriptionResult.error
         ? null
         : (subscriptionResult.data as SubscriptionEntitlementRecord | null),
-      subscriptionVerified: !subscriptionResult.error,
-      savedDocumentCount: documentCountResult.count ?? 0,
-      savedDocumentCountVerified: !documentCountResult.error && documentCountResult.count !== null
+      subscriptionVerified: Boolean(subscriptionResult && !subscriptionResult.error),
+      savedDocumentCount: documentCountResult?.count ?? 0,
+      savedDocumentCountVerified: Boolean(
+        documentCountResult && !documentCountResult.error && documentCountResult.count !== null
+      )
     },
     now
   );

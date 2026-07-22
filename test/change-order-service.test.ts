@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultInput, defaultInput } from "../src/lib/change-order";
 import {
+  AUTH_REQUIRED,
+  DATABASE_REQUEST_FAILED,
   FREE_DOCUMENT_LIMIT_REACHED,
+  NETWORK_REQUEST_FAILED,
   type ChangeOrderRepository,
   duplicateChangeOrderWithRepository,
   saveChangeOrderWithRepository,
@@ -85,6 +88,7 @@ describe("change order save actions with mocked repositories", () => {
     const result = await saveChangeOrderWithRepository(repository, null, defaultInput);
 
     expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ code: AUTH_REQUIRED });
     expect(repository.rows.size).toBe(0);
   });
 
@@ -141,11 +145,56 @@ describe("change order save actions with mocked repositories", () => {
 
     expect(result).toEqual({
       ok: false,
+      code: DATABASE_REQUEST_FAILED,
       error: "The document request could not be completed. Please try again."
     });
     expect(JSON.stringify(result)).not.toContain(internalMessage);
     expect(log).toHaveBeenCalledWith("Change order repository request failed.", {
       message: internalMessage
+    });
+    log.mockRestore();
+  });
+
+  it("distinguishes a rejected network request from a database response", async () => {
+    const repository = new FakeRepository();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(repository as ChangeOrderRepository, "insert").mockRejectedValue(
+      new Error("fetch failed")
+    );
+
+    const result = await saveChangeOrderWithRepository(repository, "user_1", defaultInput);
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: NETWORK_REQUEST_FAILED
+    });
+    expect(result.ok ? "" : result.error).toContain("could not be reached");
+    expect(JSON.stringify(result)).not.toContain("fetch failed");
+    expect(log).toHaveBeenCalledWith("Change order repository request did not complete.", {
+      message: "fetch failed"
+    });
+    log.mockRestore();
+  });
+
+  it("maps Supabase's resolved status-zero fetch failure as a network error", async () => {
+    const repository = new FakeRepository();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(repository as ChangeOrderRepository, "insert").mockResolvedValue({
+      data: null,
+      error: { code: "", message: "TypeError: fetch failed" },
+      status: 0
+    });
+
+    const result = await saveChangeOrderWithRepository(repository, "user_1", defaultInput);
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: NETWORK_REQUEST_FAILED
+    });
+    expect(result.ok ? "" : result.error).toContain("could not be reached");
+    expect(JSON.stringify(result)).not.toContain("TypeError");
+    expect(log).toHaveBeenCalledWith("Change order repository request did not complete.", {
+      message: "TypeError: fetch failed"
     });
     log.mockRestore();
   });

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ChangeOrderGenerator } from "@/components/change-order-generator";
 import { LandingPage } from "@/components/landing-page";
+import type { AccountEntitlement } from "@/lib/account-entitlements";
 import { profileFromRow } from "@/lib/change-order-records";
 import { resolveAccountEntitlement } from "@/lib/account-entitlements.server";
 import { createDefaultInput } from "@/lib/change-order";
@@ -45,7 +46,7 @@ export default async function Home() {
   const supabase = await createSupabaseServerClient();
   let isSignedIn = false;
   let profile = null;
-  let canCreateCloudDocument = true;
+  let cloudSaveBlockReason: AccountEntitlement["cloudSaveBlockReason"] = null;
 
   if (supabase) {
     const { data } = await supabase.auth.getClaims();
@@ -58,7 +59,7 @@ export default async function Home() {
         resolveAccountEntitlement(supabase, userId)
       ]);
       profile = profileFromRow(profileRow);
-      canCreateCloudDocument = entitlement.canCreateDocument;
+      cloudSaveBlockReason = entitlement.cloudSaveBlockReason;
     }
   }
 
@@ -77,7 +78,7 @@ export default async function Home() {
         pilotLink={process.env.NEXT_PUBLIC_PILOT_LINK || process.env.NEXT_PUBLIC_PAYMENT_LINK}
         templateKitLink={process.env.NEXT_PUBLIC_TEMPLATE_KIT_LINK}
         headingLevel="h2"
-        canCreateCloudDocument={canCreateCloudDocument}
+        cloudSaveBlockReason={cloudSaveBlockReason}
       />
     </>
   );

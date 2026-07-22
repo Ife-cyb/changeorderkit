@@ -26,7 +26,10 @@ export function AccountPlanSummary({
 }: AccountPlanSummaryProps) {
   const pilotState = getPilotState(pilotLink);
   const isPro = entitlement.hasProAccess;
-  const limitReached = !isPro && !entitlement.canCreateDocument;
+  const limitReached = entitlement.cloudSaveBlockReason === "free_limit_reached";
+  const verificationUnavailable =
+    entitlement.cloudSaveBlockReason === "verification_unavailable";
+  const cloudSaveBlocked = limitReached || verificationUnavailable;
   const showConfiguredUpgrade = !isPro && showUpgradeLink && pilotState.configured;
   const periodEnding =
     isPro &&
@@ -47,14 +50,20 @@ export function AccountPlanSummary({
           <p className="mt-2 font-mono text-lg font-black text-[var(--ink)]">
             {isPro
               ? "Unlimited saved documents"
-              : `${entitlement.savedDocumentCount} of 3 saved documents`}
+              : entitlement.savedDocumentCountVerified
+                ? `${entitlement.savedDocumentCount} of 3 saved documents`
+                : "Saved-document usage unavailable"}
           </p>
           <p className="mt-2 max-w-[65ch] text-sm leading-6 text-[var(--ink-soft)]">
             {isPro
               ? periodEnding
                 ? `Pro access continues through ${formatPeriodEnd(entitlement.currentPeriodEnd!)}.`
                 : "Your current Pro access includes unlimited cloud-saved documents."
-              : "The calculator, document generation, copy, text download, and Print/PDF remain free."}
+              : `${
+                  entitlement.subscriptionVerified
+                    ? ""
+                    : "Plan status could not be verified, so Free access is being used. "
+                }The calculator, document generation, copy, text download, and Print/PDF remain free.`}
           </p>
         </div>
 
@@ -79,14 +88,17 @@ export function AccountPlanSummary({
         ) : null}
       </div>
 
-      {limitReached ? (
-        <div id="free-document-limit-notice" className="workspace-row" role="status">
+      {cloudSaveBlocked ? (
+        <div id="cloud-document-creation-notice" className="workspace-row" role="status">
           <strong className="block text-sm font-black text-[var(--ink)]">
-            Free cloud-save limit reached.
+            {limitReached
+              ? "Free cloud-save limit reached."
+              : "Cloud-save usage is temporarily unavailable."}
           </strong>
           <p className="mt-1 max-w-[75ch] text-sm leading-6 text-[var(--ink-soft)]">
-            Your existing documents remain available. Delete one to free a slot, or keep creating,
-            copying, downloading, and printing without another cloud save.
+            {limitReached
+              ? "Your existing documents remain available. Delete saved documents until fewer than 3 remain, or keep creating, copying, downloading, and printing without another cloud save."
+              : "New cloud saves are blocked until account usage can be verified. Your existing documents are unchanged, and generation, copy, download, and Print/PDF remain available."}
           </p>
         </div>
       ) : null}

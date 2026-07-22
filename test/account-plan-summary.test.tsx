@@ -13,6 +13,9 @@ function entitlement(overrides: Partial<AccountEntitlement> = {}): AccountEntitl
     canCreateDocument: true,
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false,
+    subscriptionVerified: true,
+    savedDocumentCountVerified: true,
+    cloudSaveBlockReason: null,
     ...overrides
   };
 }
@@ -55,7 +58,11 @@ describe("account plan summary", () => {
   it("explains the reached Free limit without implying existing work was lost", () => {
     const html = renderToStaticMarkup(
       <AccountPlanSummary
-        entitlement={entitlement({ savedDocumentCount: 4, canCreateDocument: false })}
+        entitlement={entitlement({
+          savedDocumentCount: 4,
+          canCreateDocument: false,
+          cloudSaveBlockReason: "free_limit_reached"
+        })}
       />
     );
 
@@ -63,6 +70,24 @@ describe("account plan summary", () => {
     expect(html).toContain("Free cloud-save limit reached");
     expect(html).toContain("Your existing documents remain available");
     expect(html).toContain("copying, downloading, and printing");
+  });
+
+  it("does not mislabel a failed usage lookup as a reached Free limit", () => {
+    const html = renderToStaticMarkup(
+      <AccountPlanSummary
+        entitlement={entitlement({
+          savedDocumentCount: 3,
+          savedDocumentCountVerified: false,
+          canCreateDocument: false,
+          cloudSaveBlockReason: "verification_unavailable"
+        })}
+      />
+    );
+
+    expect(html).toContain("Saved-document usage unavailable");
+    expect(html).toContain("Cloud-save usage is temporarily unavailable");
+    expect(html).not.toContain("3 of 3 saved documents");
+    expect(html).not.toContain("Free cloud-save limit reached");
   });
 
   it("renders unlimited Pro usage and cancellation-period information", () => {

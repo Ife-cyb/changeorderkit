@@ -64,7 +64,7 @@ npx supabase migration list
 npx supabase db push
 ```
 
-Alternatively, run each unapplied migration in the Supabase SQL editor. The Pro foundation migration creates the provider-neutral `subscriptions` table, its owner-read RLS policy, private usage accounting, and the database trigger that enforces the Free limit. Apply the database migration before deploying the dashboard entitlement UI.
+Alternatively, run each unapplied migration as one complete transaction in the Supabase SQL editor; do not execute the Pro foundation file statement by statement because its backfill lock must remain held until the quota triggers are installed. The migration creates the provider-neutral `subscriptions` table, its owner-read RLS policy, private usage accounting, and the database trigger that enforces the Free limit. Apply the database migration before deploying the dashboard entitlement UI.
 
 The auth-onboarding migration creates a profile for each confirmed or newly registered user and backfills existing accounts. The entitlement migration separately backfills saved-document usage without deleting or hiding existing work.
 

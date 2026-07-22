@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveChangeOrderAction } from "@/app/actions/change-orders";
+import type { AccountEntitlement } from "@/lib/account-entitlements";
 import { DraftSummaryCard } from "@/components/generator/draft-summary-card";
 import { useDeadlineUrgency } from "@/components/deadline-urgency";
 import { GuidedSectionHeader } from "@/components/generator/guided-section-header";
@@ -46,7 +47,10 @@ import {
   type ValidationErrors
 } from "@/lib/change-order";
 import { funnelEvents, totalBucket } from "@/lib/funnel";
-import { FREE_DOCUMENT_LIMIT_REACHED } from "@/lib/change-order-service";
+import {
+  DOCUMENT_NOT_FOUND,
+  FREE_DOCUMENT_LIMIT_REACHED
+} from "@/lib/change-order-service";
 import {
   automaticDocumentTitle,
   saveCompletionState,
@@ -66,7 +70,8 @@ type Props = {
   businessProfile?: BusinessProfile | null;
   useLocalDraft?: boolean;
   headingLevel?: "h1" | "h2";
-  canCreateCloudDocument?: boolean;
+  cloudSaveBlockReason?: AccountEntitlement["cloudSaveBlockReason"];
+  localDraftStorageKey?: string;
 };
 
 const storageKey = "changeorderkit:draft:v2";
@@ -75,7 +80,11 @@ const documentStorageKey = "changeorderkit:draft:v3";
 type LocalDraftRecord = {
   input: ChangeOrderInput;
   savedAt: string | null;
+  savedOrderId: string | null;
 };
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const guidedSections: Array<{
   id: GuidedSectionId;
@@ -137,39 +146,56 @@ function parseSavedDraft(value: string | null): LocalDraftRecord | null {
     const parsed: unknown = JSON.parse(value);
 
     if (parsed && typeof parsed === "object" && "input" in parsed) {
-      const record = parsed as { input: unknown; savedAt?: unknown };
+      const record = parsed as {
+        input: unknown;
+        savedAt?: unknown;
+        savedOrderId?: unknown;
+      };
 
       const savedAt = typeof record.savedAt === "string" ? record.savedAt : "";
 
       return {
         input: sanitizeChangeOrderInput(record.input),
-        savedAt: Number.isFinite(Date.parse(savedAt)) ? savedAt : null
+        savedAt: Number.isFinite(Date.parse(savedAt)) ? savedAt : null,
+        savedOrderId:
+          typeof record.savedOrderId === "string" && uuidPattern.test(record.savedOrderId)
+            ? record.savedOrderId
+            : null
       };
     }
 
     return {
       input: sanitizeChangeOrderInput(parsed),
-      savedAt: null
+      savedAt: null,
+      savedOrderId: null
     };
   } catch {
     return null;
   }
 }
 
-function readSavedDraft(): LocalDraftRecord | null {
+function readSavedDraft(activeStorageKey: string): LocalDraftRecord | null {
   try {
     return parseSavedDraft(
-      window.localStorage.getItem(documentStorageKey) ?? window.localStorage.getItem(storageKey)
+      window.localStorage.getItem(activeStorageKey) ??
+        (activeStorageKey === documentStorageKey ? window.localStorage.getItem(storageKey) : null)
     );
   } catch {
     return null;
   }
 }
 
-function writeSavedDraft(input: ChangeOrderInput) {
+function writeSavedDraft(
+  input: ChangeOrderInput,
+  activeStorageKey: string,
+  savedOrderId: string | null = null
+) {
   try {
     const savedAt = new Date().toISOString();
-    window.localStorage.setItem(documentStorageKey, JSON.stringify({ input, savedAt }));
+    window.localStorage.setItem(
+      activeStorageKey,
+      JSON.stringify({ input, savedAt, savedOrderId })
+    );
     return savedAt;
   } catch {
     // Browsers can block storage in private or restricted modes.
@@ -177,10 +203,58 @@ function writeSavedDraft(input: ChangeOrderInput) {
   }
 }
 
-function clearSavedDraft() {
+function preserveSavedOrderId(
+  inputAtSave: ChangeOrderInput,
+  activeStorageKey: string,
+  savedOrderId: string
+) {
+  const existing = readSavedDraft(activeStorageKey);
+
+  if (!existing) {
+    return writeSavedDraft(inputAtSave, activeStorageKey, savedOrderId);
+  }
+
   try {
-    window.localStorage.removeItem(documentStorageKey);
-    window.localStorage.removeItem(storageKey);
+    const savedAt = existing.savedAt ?? new Date().toISOString();
+    window.localStorage.setItem(
+      activeStorageKey,
+      JSON.stringify({ ...existing, savedAt, savedOrderId })
+    );
+    return savedAt;
+  } catch {
+    return null;
+  }
+}
+
+function removeSavedOrderId(
+  inputAtSave: ChangeOrderInput,
+  activeStorageKey: string
+) {
+  const existing = readSavedDraft(activeStorageKey);
+  const savedAt = existing?.savedAt ?? new Date().toISOString();
+
+  try {
+    window.localStorage.setItem(
+      activeStorageKey,
+      JSON.stringify({
+        input: existing?.input ?? inputAtSave,
+        savedAt,
+        savedOrderId: null
+      })
+    );
+    return savedAt;
+  } catch {
+    return null;
+  }
+}
+
+function clearSavedDraft(activeStorageKey: string) {
+  try {
+    window.localStorage.removeItem(activeStorageKey);
+
+    if (activeStorageKey === documentStorageKey) {
+      window.localStorage.removeItem(storageKey);
+    }
   } catch {
     // Nothing to clear if storage is unavailable.
   }
@@ -249,7 +323,8 @@ export function ChangeOrderGenerator({
   businessProfile,
   useLocalDraft = true,
   headingLevel = "h1",
-  canCreateCloudDocument = true
+  cloudSaveBlockReason = null,
+  localDraftStorageKey = documentStorageKey
 }: Props) {
   const router = useRouter();
   const [input, setInput] = useState<ChangeOrderInput>(() =>
@@ -277,10 +352,10 @@ export function ChangeOrderGenerator({
   const savedRevisionRef = useRef(0);
   const hydratedInputRef = useRef(false);
   const hydratedOrderIdRef = useRef(savedOrderId ?? "");
+  const suppressAccountDraftAutosaveRef = useRef(false);
   const firstErrorRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(
     null
   );
-
   const generated = useMemo(() => generateChangeOrder(input), [input]);
   const pilotState = getPilotState(pilotLink);
   const kitState = getTemplateKitState(templateKitLink);
@@ -299,7 +374,10 @@ export function ChangeOrderGenerator({
   const documentLabel = documentTypeLabel(input.documentType);
   const documentLabelLower = documentLabel.toLowerCase();
   const cloudSaveBlocked =
-    !currentOrderId && (!canCreateCloudDocument || saveLimitReached);
+    !currentOrderId && (cloudSaveBlockReason !== null || saveLimitReached);
+  const showCloudSaveNotice = cloudSaveBlocked || saveLimitReached;
+  const showFreeLimitMessage =
+    saveLimitReached || cloudSaveBlockReason === "free_limit_reached";
   const isChangeOrder = input.documentType === "change-order";
   const isServiceAgreement = input.documentType === "service-agreement";
   const sectionReadiness = useMemo<Record<GuidedSectionId, boolean>>(
@@ -356,43 +434,56 @@ export function ChangeOrderGenerator({
   useEffect(() => {
     const restoreId = window.setTimeout(() => {
       const nextOrderId = savedOrderId ?? "";
+      const fallback = createDefaultInput(businessProfile ?? undefined);
+      const restored = useLocalDraft ? readSavedDraft(localDraftStorageKey) : null;
+      const effectiveOrderId = nextOrderId || restored?.savedOrderId || "";
       const orderChanged =
-        hydratedInputRef.current && hydratedOrderIdRef.current !== nextOrderId;
+        hydratedInputRef.current && hydratedOrderIdRef.current !== effectiveOrderId;
       const hasUnsavedEdits = editRevisionRef.current !== savedRevisionRef.current;
 
       if (!orderChanged && hasUnsavedEdits) {
         setDraftLoaded(true);
         hydratedInputRef.current = true;
-        hydratedOrderIdRef.current = nextOrderId;
+        hydratedOrderIdRef.current = effectiveOrderId;
         return;
       }
 
       if (orderChanged) {
         editRevisionRef.current = 0;
         savedRevisionRef.current = 0;
-        setCurrentOrderId(nextOrderId);
       }
 
-      const fallback = createDefaultInput(businessProfile ?? undefined);
-      const restored = useLocalDraft ? readSavedDraft() : null;
+      setCurrentOrderId(effectiveOrderId);
       setInput(restored?.input ?? sanitizeChangeOrderInput(initialInput ?? fallback));
       setNumericDrafts({});
       setLastSavedAt(restored?.savedAt ?? null);
       setDraftLoaded(true);
       hydratedInputRef.current = true;
-      hydratedOrderIdRef.current = nextOrderId;
+      hydratedOrderIdRef.current = effectiveOrderId;
     }, 0);
 
     return () => window.clearTimeout(restoreId);
-  }, [businessProfile, initialInput, savedOrderId, useLocalDraft]);
+  }, [businessProfile, initialInput, localDraftStorageKey, savedOrderId, useLocalDraft]);
 
   useEffect(() => {
     if (!draftLoaded || !useLocalDraft) {
       return;
     }
 
+    if (suppressAccountDraftAutosaveRef.current) {
+      if (editRevisionRef.current === savedRevisionRef.current) {
+        return;
+      }
+
+      suppressAccountDraftAutosaveRef.current = false;
+    }
+
     const saveId = window.setTimeout(() => {
-      const savedAt = writeSavedDraft(input);
+      const savedAt = writeSavedDraft(
+        input,
+        localDraftStorageKey,
+        localDraftStorageKey === documentStorageKey ? null : currentOrderId || null
+      );
       setAutosaveAvailable(Boolean(savedAt));
 
       if (savedAt) {
@@ -402,7 +493,7 @@ export function ChangeOrderGenerator({
     }, 400);
 
     return () => window.clearTimeout(saveId);
-  }, [draftLoaded, input, useLocalDraft]);
+  }, [currentOrderId, draftLoaded, input, localDraftStorageKey, useLocalDraft]);
 
   useEffect(() => {
     const clockId = window.setInterval(() => setAutosaveClock(Date.now()), 30_000);
@@ -598,6 +689,7 @@ export function ChangeOrderGenerator({
     }
 
     const revisionAtSave = editRevisionRef.current;
+    setSaveLimitReached(false);
 
     startSaving(async () => {
       try {
@@ -606,17 +698,68 @@ export function ChangeOrderGenerator({
         if (!result.ok) {
           if (result.code === FREE_DOCUMENT_LIMIT_REACHED) {
             setSaveLimitReached(true);
+            router.refresh();
           }
+
+          if (result.code === DOCUMENT_NOT_FOUND && !savedOrderId && currentOrderId) {
+            const savedAt = removeSavedOrderId(input, localDraftStorageKey);
+            setCurrentOrderId("");
+            hydratedOrderIdRef.current = "";
+            setAutosaveAvailable(Boolean(savedAt));
+
+            if (savedAt) {
+              setLastSavedAt(savedAt);
+              setAutosaveClock(Date.now());
+            }
+
+            router.refresh();
+            showToast(
+              "That cloud record no longer exists. Your browser draft is still here; choose Save draft again to create a new record."
+            );
+            return;
+          }
+
           showToast(result.error);
           return;
         }
 
         setSaveLimitReached(false);
+
         savedRevisionRef.current = revisionAtSave;
         const { hasNewerEdits, shouldNavigateToSavedDocument } = saveCompletionState(
           revisionAtSave,
           editRevisionRef.current
         );
+
+        if (
+          !hasNewerEdits &&
+          useLocalDraft &&
+          localDraftStorageKey !== documentStorageKey
+        ) {
+          suppressAccountDraftAutosaveRef.current = true;
+          clearSavedDraft(localDraftStorageKey);
+          setLastSavedAt(null);
+        }
+
+        if (
+          hasNewerEdits &&
+          result.id &&
+          useLocalDraft &&
+          localDraftStorageKey !== documentStorageKey
+        ) {
+          suppressAccountDraftAutosaveRef.current = false;
+          const savedAt = preserveSavedOrderId(
+            input,
+            localDraftStorageKey,
+            result.id
+          );
+          setAutosaveAvailable(Boolean(savedAt));
+
+          if (savedAt) {
+            setLastSavedAt(savedAt);
+            setAutosaveClock(Date.now());
+          }
+        }
 
         if (result.id) {
           setCurrentOrderId(result.id);
@@ -705,7 +848,14 @@ export function ChangeOrderGenerator({
   }
 
   function resetDraft() {
-    clearSavedDraft();
+    suppressAccountDraftAutosaveRef.current = false;
+    if (!savedOrderId) {
+      setCurrentOrderId("");
+      hydratedOrderIdRef.current = "";
+    }
+    if (useLocalDraft) {
+      clearSavedDraft(localDraftStorageKey);
+    }
     editRevisionRef.current += 1;
     setInput(createDefaultInput(businessProfile ?? undefined, input.documentType));
     setNumericDrafts({});
@@ -716,7 +866,14 @@ export function ChangeOrderGenerator({
   }
 
   function clearToBlank(eventName: "example_cleared" | "form_cleared", message: string) {
-    clearSavedDraft();
+    suppressAccountDraftAutosaveRef.current = false;
+    if (!savedOrderId) {
+      setCurrentOrderId("");
+      hydratedOrderIdRef.current = "";
+    }
+    if (useLocalDraft) {
+      clearSavedDraft(localDraftStorageKey);
+    }
     editRevisionRef.current += 1;
     setInput(createBlankInput(businessProfile ?? undefined, input.documentType));
     setNumericDrafts({});
@@ -992,21 +1149,24 @@ export function ChangeOrderGenerator({
             />
           </fieldset>
 
-          {cloudSaveBlocked ? (
+          {showCloudSaveNotice ? (
             <div
               id="cloud-save-limit-notice"
               className="mx-4 mb-4 rounded-lg border border-[var(--border)] bg-[var(--accent-soft)] p-3 text-sm leading-6 text-[var(--ink-soft)] sm:mx-5"
               role="status"
             >
               <strong className="block font-black text-[var(--ink)]">
-                Free cloud-save limit reached.
+                {showFreeLimitMessage
+                  ? "Free cloud-save limit reached."
+                  : "Cloud-save usage is temporarily unavailable."}
               </strong>
               <span>
-                {useLocalDraft
+                {useLocalDraft && autosaveAvailable
                   ? "Your work remains in this generator and browser autosave continues. "
                   : "Your work remains in this editor while it is open. "}
-                Copy, download, and Print/PDF remain available. Delete a saved document to free a
-                cloud slot.
+                {showFreeLimitMessage
+                  ? "Copy, download, and Print/PDF remain available. Delete saved documents until fewer than 3 remain to create another cloud save."
+                  : "New cloud saves are blocked until account usage can be verified. Copy, download, and Print/PDF remain available."}
               </span>
             </div>
           ) : null}
@@ -1022,7 +1182,7 @@ export function ChangeOrderGenerator({
               className={cloudSaveBlocked ? "btn btn-disabled" : "btn btn-secondary"}
               onClick={saveToAccount}
               disabled={isSaving || cloudSaveBlocked}
-              aria-describedby={cloudSaveBlocked ? "cloud-save-limit-notice" : undefined}
+              aria-describedby={showCloudSaveNotice ? "cloud-save-limit-notice" : undefined}
             >
               <Save className="h-5 w-5" aria-hidden="true" />
               {isSaving
@@ -1030,7 +1190,9 @@ export function ChangeOrderGenerator({
                 : currentOrderId
                   ? "Save changes"
                   : cloudSaveBlocked
-                    ? "Cloud save limit reached"
+                    ? showFreeLimitMessage
+                      ? "Cloud save limit reached"
+                      : "Cloud save unavailable"
                     : "Save draft"}
             </button>
             <button type="submit" className="btn btn-primary">
