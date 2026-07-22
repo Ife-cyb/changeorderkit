@@ -3,10 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
+  AUTH_REQUIRED,
+  AUTH_VERIFICATION_FAILED,
   duplicateChangeOrderWithRepository,
+  SERVICE_NOT_CONFIGURED,
   saveChangeOrderWithRepository,
   updateChangeOrderStatusWithRepository,
   deleteChangeOrderWithRepository,
+  type ChangeOrderActionErrorCode,
   type ChangeOrderActionResult
 } from "@/lib/change-order-service";
 import type { ChangeOrderInput } from "@/lib/change-order";
@@ -22,6 +26,7 @@ async function actionContext(): Promise<
   | {
       ok: false;
       error: string;
+      code: ChangeOrderActionErrorCode;
     }
 > {
   const supabase = await createSupabaseServerClient();
@@ -29,16 +34,43 @@ async function actionContext(): Promise<
   if (!supabase) {
     return {
       ok: false,
+      code: SERVICE_NOT_CONFIGURED,
       error: "Supabase is not configured yet."
     };
   }
 
-  const { data, error } = await supabase.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : "";
+  let claimsResult: Awaited<ReturnType<typeof supabase.auth.getClaims>>;
 
-  if (error || !userId) {
+  try {
+    claimsResult = await supabase.auth.getClaims();
+  } catch (error) {
+    console.error("Change order session verification did not complete.", {
+      message: error instanceof Error ? error.message : "Unknown authentication failure"
+    });
     return {
       ok: false,
+      code: AUTH_VERIFICATION_FAILED,
+      error:
+        "We couldn't verify your session. Your document is still here; check your connection and try again."
+    };
+  }
+
+  const { data, error } = claimsResult;
+  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : "";
+
+  if (error) {
+    return {
+      ok: false,
+      code: AUTH_VERIFICATION_FAILED,
+      error:
+        "We couldn't verify your session. Your document is still here; check your connection and try again."
+    };
+  }
+
+  if (!userId) {
+    return {
+      ok: false,
+      code: AUTH_REQUIRED,
       error: "Sign in to save documents."
     };
   }
@@ -65,8 +97,12 @@ function search(path: string, values: Record<string, string>) {
   return `${path}?${params.toString()}`;
 }
 
-function redirectForContextError(error: string): never {
-  redirect(search("/sign-in", { next: "/dashboard", error }));
+function redirectForContextError(error: string, code: ChangeOrderActionErrorCode): never {
+  if (code === AUTH_REQUIRED) {
+    redirect(search("/sign-in", { next: "/dashboard", error }));
+  }
+
+  redirect(search("/dashboard", { error }));
 }
 
 function finishDashboardMutation(result: ChangeOrderActionResult, message: string): never {
@@ -87,6 +123,7 @@ export async function saveChangeOrderAction(
   if (!context.ok) {
     return {
       ok: false,
+      code: context.code,
       error: context.error
     };
   }
@@ -105,7 +142,7 @@ export async function archiveChangeOrderFormAction(formData: FormData) {
   const context = await actionContext();
 
   if (!context.ok) {
-    redirectForContextError(context.error);
+    redirectForContextError(context.error, context.code);
   }
 
   if (!id) {
@@ -126,7 +163,7 @@ export async function reopenChangeOrderFormAction(formData: FormData) {
   const context = await actionContext();
 
   if (!context.ok) {
-    redirectForContextError(context.error);
+    redirectForContextError(context.error, context.code);
   }
 
   if (!id) {
@@ -147,7 +184,7 @@ export async function duplicateChangeOrderFormAction(formData: FormData) {
   const context = await actionContext();
 
   if (!context.ok) {
-    redirectForContextError(context.error);
+    redirectForContextError(context.error, context.code);
   }
 
   if (!id) {
@@ -163,7 +200,7 @@ export async function deleteChangeOrderFormAction(formData: FormData) {
   const context = await actionContext();
 
   if (!context.ok) {
-    redirectForContextError(context.error);
+    redirectForContextError(context.error, context.code);
   }
 
   if (!id) {

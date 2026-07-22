@@ -31,6 +31,10 @@ export function saveCompletionState(revisionAtSave: number, currentRevision: num
   };
 }
 
+export function accountNewDraftStorageKey(userId: string) {
+  return `changeorderkit:account:${userId}:new-draft:v1`;
+}
+
 function isSeededExampleDraft(input: ChangeOrderInput) {
   const example = createDefaultInput(undefined, input.documentType);
 

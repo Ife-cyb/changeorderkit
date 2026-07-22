@@ -132,3 +132,4 @@ Shadows are tinted toward the green-neutral background. No pure-black drop shado
 - 2026-07-21 by guided form UX refinement: ordered the generator around Job → Scope → Price → Approval, added progressive disclosure, live readiness, blank/example onboarding, inline recovery, and a mobile-first handoff.
 - 2026-07-21 by frontend-god-mode landing build: added the real-output conversion hero, proof band, workflow rows, deliverable rail, FAQ system, tracked homepage CTA, and full site footer.
 - 2026-07-21 by correctness audit: added visible/focusable cross-field validation, hydration-safe local deadline state, mutation recovery, and responsive navigation cleanup without changing visual tokens.
+- 2026-07-22 by Pro entitlement foundation: added a restrained account-plan and saved-document usage row using the existing workspace, notice, button, and token system.

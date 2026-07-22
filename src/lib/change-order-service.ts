@@ -16,12 +16,33 @@ import {
 
 export type RepositoryError = {
   message: string;
+  code?: string;
+  details?: string;
+  hint?: string;
 };
 
 export type RepositoryResult<T> = {
   data: T | null;
   error: RepositoryError | null;
+  status?: number;
 };
+
+export const FREE_DOCUMENT_LIMIT_REACHED = "FREE_DOCUMENT_LIMIT_REACHED" as const;
+export const AUTH_REQUIRED = "AUTH_REQUIRED" as const;
+export const AUTH_VERIFICATION_FAILED = "AUTH_VERIFICATION_FAILED" as const;
+export const DATABASE_REQUEST_FAILED = "DATABASE_REQUEST_FAILED" as const;
+export const NETWORK_REQUEST_FAILED = "NETWORK_REQUEST_FAILED" as const;
+export const DOCUMENT_NOT_FOUND = "DOCUMENT_NOT_FOUND" as const;
+export const SERVICE_NOT_CONFIGURED = "SERVICE_NOT_CONFIGURED" as const;
+
+export type ChangeOrderActionErrorCode =
+  | typeof FREE_DOCUMENT_LIMIT_REACHED
+  | typeof AUTH_REQUIRED
+  | typeof AUTH_VERIFICATION_FAILED
+  | typeof DATABASE_REQUEST_FAILED
+  | typeof NETWORK_REQUEST_FAILED
+  | typeof DOCUMENT_NOT_FOUND
+  | typeof SERVICE_NOT_CONFIGURED;
 
 export type ChangeOrderRepository = {
   insert(payload: ChangeOrderInsert): Promise<RepositoryResult<ChangeOrderRow>>;
@@ -43,11 +64,13 @@ export type ChangeOrderActionResult =
   | {
       ok: false;
       error: string;
+      code?: ChangeOrderActionErrorCode;
     };
 
 function authError(): ChangeOrderActionResult {
   return {
     ok: false,
+    code: AUTH_REQUIRED,
     error: "Sign in to save documents."
   };
 }
@@ -55,21 +78,78 @@ function authError(): ChangeOrderActionResult {
 function notFoundError(): ChangeOrderActionResult {
   return {
     ok: false,
+    code: DOCUMENT_NOT_FOUND,
     error: "Document not found or you do not have access."
   };
 }
 
-function repositoryError(error: RepositoryError | null): ChangeOrderActionResult {
+function repositoryError(
+  error: RepositoryError | null,
+  status?: number
+): ChangeOrderActionResult {
+  if (status === 0) {
+    return networkError(error);
+  }
+
+  if (
+    error?.code === "P0001" &&
+    error.message.includes(FREE_DOCUMENT_LIMIT_REACHED)
+  ) {
+    return {
+      ok: false,
+      code: FREE_DOCUMENT_LIMIT_REACHED,
+      error:
+        "Free includes up to 3 cloud-saved documents. Your existing documents are unchanged, and this document is still available to copy, download, or print. Delete saved documents until fewer than 3 remain to free a cloud slot."
+    };
+  }
+
   if (error) {
     console.error("Change order repository request failed.", {
+      code: error.code,
       message: error.message
     });
   }
 
   return {
     ok: false,
+    code: DATABASE_REQUEST_FAILED,
     error: "The document request could not be completed. Please try again."
   };
+}
+
+function networkError(error: unknown): ChangeOrderActionResult {
+  const message =
+    error instanceof Error
+      ? error.message
+      : error && typeof error === "object" && "message" in error &&
+          typeof error.message === "string"
+        ? error.message
+        : "Unknown repository failure";
+
+  console.error("Change order repository request did not complete.", {
+    message
+  });
+
+  return {
+    ok: false,
+    code: NETWORK_REQUEST_FAILED,
+    error:
+      "The saved-document service could not be reached. Your edits are still here; check your connection and try again."
+  };
+}
+
+async function repositoryRequest<T>(request: () => Promise<RepositoryResult<T>>) {
+  try {
+    return {
+      ok: true as const,
+      result: await request()
+    };
+  } catch (error) {
+    return {
+      ok: false as const,
+      result: networkError(error)
+    };
+  }
 }
 
 const requiredStringFields = [
@@ -168,10 +248,18 @@ export async function saveChangeOrderWithRepository(
   }
 
   if (id) {
-    const result = await repository.update(userId, id, buildChangeOrderUpdate(prepared.input));
+    const request = await repositoryRequest(() =>
+      repository.update(userId, id, buildChangeOrderUpdate(prepared.input))
+    );
+
+    if (!request.ok) {
+      return request.result;
+    }
+
+    const result = request.result;
 
     if (result.error) {
-      return repositoryError(result.error);
+      return repositoryError(result.error, result.status);
     }
 
     if (!result.data) {
@@ -187,14 +275,22 @@ export async function saveChangeOrderWithRepository(
     };
   }
 
-  const result = await repository.insert(buildChangeOrderInsert(userId, prepared.input));
+  const request = await repositoryRequest(() =>
+    repository.insert(buildChangeOrderInsert(userId, prepared.input))
+  );
+
+  if (!request.ok) {
+    return request.result;
+  }
+
+  const result = request.result;
 
   if (result.error) {
-    return repositoryError(result.error);
+    return repositoryError(result.error, result.status);
   }
 
   if (!result.data) {
-    return repositoryError(null);
+    return repositoryError(null, result.status);
   }
 
   const changeOrder = changeOrderFromRow(result.data);
@@ -216,13 +312,21 @@ export async function updateChangeOrderStatusWithRepository(
     return authError();
   }
 
-  const result = await repository.update(userId, id, {
-    status,
-    updated_at: new Date().toISOString()
-  });
+  const request = await repositoryRequest(() =>
+    repository.update(userId, id, {
+      status,
+      updated_at: new Date().toISOString()
+    })
+  );
+
+  if (!request.ok) {
+    return request.result;
+  }
+
+  const result = request.result;
 
   if (result.error) {
-    return repositoryError(result.error);
+    return repositoryError(result.error, result.status);
   }
 
   if (!result.data) {
@@ -247,10 +351,16 @@ export async function duplicateChangeOrderWithRepository(
     return authError();
   }
 
-  const original = await repository.get(userId, id);
+  const originalRequest = await repositoryRequest(() => repository.get(userId, id));
+
+  if (!originalRequest.ok) {
+    return originalRequest.result;
+  }
+
+  const original = originalRequest.result;
 
   if (original.error) {
-    return repositoryError(original.error);
+    return repositoryError(original.error, original.status);
   }
 
   if (!original.data) {
@@ -265,14 +375,22 @@ export async function duplicateChangeOrderWithRepository(
     documentTitle: `${duplicateTitle.slice(0, 180 - duplicateSuffix.length)}${duplicateSuffix}`
   };
 
-  const result = await repository.insert(buildChangeOrderInsert(userId, duplicateInput, "draft"));
+  const duplicateRequest = await repositoryRequest(() =>
+    repository.insert(buildChangeOrderInsert(userId, duplicateInput, "draft"))
+  );
+
+  if (!duplicateRequest.ok) {
+    return duplicateRequest.result;
+  }
+
+  const result = duplicateRequest.result;
 
   if (result.error) {
-    return repositoryError(result.error);
+    return repositoryError(result.error, result.status);
   }
 
   if (!result.data) {
-    return repositoryError(null);
+    return repositoryError(null, result.status);
   }
 
   const changeOrder = changeOrderFromRow(result.data);
@@ -293,10 +411,16 @@ export async function deleteChangeOrderWithRepository(
     return authError();
   }
 
-  const result = await repository.delete(userId, id);
+  const request = await repositoryRequest(() => repository.delete(userId, id));
+
+  if (!request.ok) {
+    return request.result;
+  }
+
+  const result = request.result;
 
   if (result.error) {
-    return repositoryError(result.error);
+    return repositoryError(result.error, result.status);
   }
 
   if (!result.data) {

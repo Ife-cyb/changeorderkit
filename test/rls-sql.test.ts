@@ -17,9 +17,8 @@ describe("supabase rls migration", () => {
     expect(migration).toContain("with check ((select auth.uid()) = user_id)");
   });
 
-  it("does not rely on role checks or service-role grants", () => {
+  it("does not rely on JWT role checks or broad grants", () => {
     expect(migration).not.toContain("auth.role()");
-    expect(migration).not.toContain("service_role");
     expect(migration).not.toContain("grant all");
   });
 

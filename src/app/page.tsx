@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { ChangeOrderGenerator } from "@/components/change-order-generator";
 import { LandingPage } from "@/components/landing-page";
+import type { AccountEntitlement } from "@/lib/account-entitlements";
 import { profileFromRow } from "@/lib/change-order-records";
+import { resolveAccountEntitlement } from "@/lib/account-entitlements.server";
 import { createDefaultInput } from "@/lib/change-order";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -44,6 +46,7 @@ export default async function Home() {
   const supabase = await createSupabaseServerClient();
   let isSignedIn = false;
   let profile = null;
+  let cloudSaveBlockReason: AccountEntitlement["cloudSaveBlockReason"] = null;
 
   if (supabase) {
     const { data } = await supabase.auth.getClaims();
@@ -51,12 +54,12 @@ export default async function Home() {
 
     if (userId) {
       isSignedIn = true;
-      const { data: profileRow } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
+      const [{ data: profileRow }, entitlement] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+        resolveAccountEntitlement(supabase, userId)
+      ]);
       profile = profileFromRow(profileRow);
+      cloudSaveBlockReason = entitlement.cloudSaveBlockReason;
     }
   }
 
@@ -75,6 +78,7 @@ export default async function Home() {
         pilotLink={process.env.NEXT_PUBLIC_PILOT_LINK || process.env.NEXT_PUBLIC_PAYMENT_LINK}
         templateKitLink={process.env.NEXT_PUBLIC_TEMPLATE_KIT_LINK}
         headingLevel="h2"
+        cloudSaveBlockReason={cloudSaveBlockReason}
       />
     </>
   );

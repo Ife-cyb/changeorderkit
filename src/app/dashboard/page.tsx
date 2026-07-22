@@ -18,6 +18,7 @@ import {
   duplicateChangeOrderFormAction,
   reopenChangeOrderFormAction
 } from "@/app/actions/change-orders";
+import { AccountPlanSummary } from "@/components/account-plan-summary";
 import { ApprovalDeadlineIndicator } from "@/components/deadline-urgency";
 import { SetupNotice } from "@/components/setup-notice";
 import { changeOrderFromRow, profileFromRow } from "@/lib/change-order-records";
@@ -30,6 +31,7 @@ import {
   type SavedProjectDocument
 } from "@/lib/change-order";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveAccountEntitlement } from "@/lib/account-entitlements.server";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +101,13 @@ function EmptyState({ archived = false, activeType }: { archived?: boolean; acti
   );
 }
 
-function DocumentList({ orders }: { orders: SavedProjectDocument[] }) {
+function DocumentList({
+  orders,
+  canCreateDocument
+}: {
+  orders: SavedProjectDocument[];
+  canCreateDocument: boolean;
+}) {
   return (
     <div className="workspace-panel px-4 sm:px-5">
       {orders.map((order) => (
@@ -131,13 +139,25 @@ function DocumentList({ orders }: { orders: SavedProjectDocument[] }) {
                 <Pencil className="h-5 w-5" aria-hidden="true" />
                 Edit
               </Link>
-              <form action={duplicateChangeOrderFormAction}>
-                <input type="hidden" name="id" value={order.id} />
-                <button className="btn btn-secondary w-full" type="submit">
+              {canCreateDocument ? (
+                <form action={duplicateChangeOrderFormAction}>
+                  <input type="hidden" name="id" value={order.id} />
+                  <button className="btn btn-secondary w-full" type="submit">
+                    <Copy className="h-5 w-5" aria-hidden="true" />
+                    Duplicate
+                  </button>
+                </form>
+              ) : (
+                <button
+                  className="btn btn-disabled w-full"
+                  type="button"
+                  disabled
+                  aria-describedby="cloud-document-creation-notice"
+                >
                   <Copy className="h-5 w-5" aria-hidden="true" />
-                  Duplicate
+                  Duplicate unavailable
                 </button>
-              </form>
+              )}
               {order.status === "archived" ? (
                 <form action={reopenChangeOrderFormAction}>
                   <input type="hidden" name="id" value={order.id} />
@@ -195,12 +215,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
 
   const [
     { data: profileRow, error: profileError },
-    { data: orderRows, error: orderError }
+    { data: orderRows, error: orderError },
+    entitlement
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
     supabase.from("change_orders").select("*").eq("user_id", userId).order("updated_at", {
       ascending: false
-    })
+    }),
+    resolveAccountEntitlement(supabase, userId)
   ]);
 
   const profile = profileError ? null : profileFromRow(profileRow);
@@ -274,6 +296,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         </p>
       ) : null}
 
+      <AccountPlanSummary
+        entitlement={entitlement}
+        pilotLink={process.env.NEXT_PUBLIC_PILOT_LINK || process.env.NEXT_PUBLIC_PAYMENT_LINK}
+        showUpgradeLink={process.env.NEXT_PUBLIC_SHOW_UPSELLS === "true"}
+      />
+
       <div className="mb-5 flex flex-wrap gap-2" aria-label="Document filters">
         <Link className={!activeType ? "segment segment-active" : "segment"} href={typeFilterHref()}>
           <Filter className="h-4 w-4" aria-hidden="true" />
@@ -319,7 +347,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       ) : (
         <div className="grid gap-8">
           {activeOrders.length > 0 ? (
-            <DocumentList orders={activeOrders} />
+            <DocumentList
+              orders={activeOrders}
+              canCreateDocument={entitlement.canCreateDocument}
+            />
           ) : (
             <EmptyState activeType={activeType ?? undefined} />
           )}
@@ -327,7 +358,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
           <section>
             <h2 className="mb-3 text-xl font-black tracking-tight text-[var(--ink)]">Archived</h2>
             {archivedOrders.length > 0 ? (
-              <DocumentList orders={archivedOrders} />
+              <DocumentList
+                orders={archivedOrders}
+                canCreateDocument={entitlement.canCreateDocument}
+              />
             ) : (
               <EmptyState archived activeType={activeType ?? undefined} />
             )}
