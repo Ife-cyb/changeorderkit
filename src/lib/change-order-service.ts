@@ -16,6 +16,9 @@ import {
 
 export type RepositoryError = {
   message: string;
+  code?: string;
+  details?: string;
+  hint?: string;
 };
 
 export type RepositoryResult<T> = {
@@ -43,7 +46,10 @@ export type ChangeOrderActionResult =
   | {
       ok: false;
       error: string;
+      code?: typeof FREE_DOCUMENT_LIMIT_REACHED;
     };
+
+export const FREE_DOCUMENT_LIMIT_REACHED = "FREE_DOCUMENT_LIMIT_REACHED" as const;
 
 function authError(): ChangeOrderActionResult {
   return {
@@ -60,8 +66,21 @@ function notFoundError(): ChangeOrderActionResult {
 }
 
 function repositoryError(error: RepositoryError | null): ChangeOrderActionResult {
+  if (
+    error?.code === "P0001" &&
+    error.message.includes(FREE_DOCUMENT_LIMIT_REACHED)
+  ) {
+    return {
+      ok: false,
+      code: FREE_DOCUMENT_LIMIT_REACHED,
+      error:
+        "Free includes up to 3 cloud-saved documents. Your existing documents are unchanged, and this document is still available to copy, download, or print. Delete one saved document to free a cloud slot."
+    };
+  }
+
   if (error) {
     console.error("Change order repository request failed.", {
+      code: error.code,
       message: error.message
     });
   }
